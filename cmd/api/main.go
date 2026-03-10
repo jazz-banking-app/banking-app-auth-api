@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/database"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
@@ -19,6 +20,10 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("no .env file found, using system environment")
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		panic(fmt.Sprintf("failed to load config: %v", err))
@@ -29,7 +34,15 @@ func main() {
 
 	ctx := context.Background()
 
-	postgres, err := database.NewPostgres(ctx, cfg.Postgres)
+	postgres, err := database.NewPostgres(
+		ctx,
+		cfg.Postgres.Host,
+		cfg.Postgres.Port,
+		cfg.Postgres.User,
+		cfg.Postgres.Password,
+		cfg.Postgres.DBName,
+		cfg.Postgres.SSLMode,
+	)
 	if err != nil {
 		log.Fatal("failed to connect to PostgreSQL", zap.Error(err))
 	}

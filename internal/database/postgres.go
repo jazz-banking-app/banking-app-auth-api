@@ -6,22 +6,21 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
 )
 
 type Postgres struct {
 	Pool *pgxpool.Pool
 }
 
-func NewPostgres(ctx context.Context, cfg config.PostgresConfig) (*Postgres, error) {
+func NewPostgres(ctx context.Context, host, port, user, password, dbname, sslmode string) (*Postgres, error) {
 	dsn := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		cfg.User,
-		cfg.Password,
-		cfg.Host,
-		cfg.Port,
-		cfg.DBName,
-		cfg.SSLMode,
+		user,
+		password,
+		host,
+		port,
+		dbname,
+		sslmode,
 	)
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)

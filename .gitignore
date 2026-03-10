@@ -26,4 +26,7 @@ vendor/
 Thumbs.db
 
 # Logs
-*.log
+*.log*.db  
+*.db-wal  
+*.db-shm  
+.env 

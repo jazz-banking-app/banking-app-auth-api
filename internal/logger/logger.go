@@ -17,12 +17,16 @@ func New(level string) *Logger {
 
 	config := zap.NewProductionConfig()
 	config.Level = zap.NewAtomicLevelAt(zapLevel)
-	config.Encoding = "json"
-	config.EncoderConfig.TimeKey = "timestamp"
+	config.Encoding = "console"
+	config.EncoderConfig.TimeKey = "time"
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.EncoderConfig.CallerKey = "caller"
 	config.EncoderConfig.LevelKey = "level"
 	config.EncoderConfig.MessageKey = "message"
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
+	config.OutputPaths = []string{"stdout"}
+	config.ErrorOutputPaths = []string{"stderr"}
 
 	logger, err := config.Build(zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	if err != nil {

@@ -6,14 +6,15 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"regexp"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
+	"go.uber.org/zap"
 )
 
 var validate *validator.Validate
@@ -40,11 +41,13 @@ func init() {
 
 type AuthHandler struct {
 	authService *service.AuthService
+	log         *logger.Logger
 }
 
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, log *logger.Logger) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
+		log:         log,
 	}
 }
 
@@ -115,19 +118,30 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.authService.Register(r.Context(), req.Phone, req.Password)
 	if err != nil {
-		fmt.Println("Register error:", err)
-
 		if err == service.ErrUserAlreadyExists {
+			h.log.Warn("user registration failed",
+				zap.String("phone", req.Phone),
+				zap.String("reason", "user already exists"),
+			)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "user already exists"})
 			return
 		}
+		h.log.Error("user registration failed",
+			zap.String("phone", req.Phone),
+			zap.Error(err),
+		)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "internal error"})
 		return
 	}
+
+	h.log.Info("user registered",
+		zap.String("user_id", tokens.User.ID.String()),
+		zap.String("phone", req.Phone),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -177,16 +191,28 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password)
 	if err != nil {
 		if err == service.ErrInvalidCredentials {
+			h.log.Warn("failed login attempt",
+				zap.String("phone", req.Phone),
+			)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid credentials"})
 			return
 		}
+		h.log.Error("login failed",
+			zap.String("phone", req.Phone),
+			zap.Error(err),
+		)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "internal error"})
 		return
 	}
+
+	h.log.Info("user logged in",
+		zap.String("user_id", tokens.User.ID.String()),
+		zap.String("phone", req.Phone),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(AuthResponse{

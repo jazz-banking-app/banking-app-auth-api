@@ -36,13 +36,15 @@ func Logging(log *logger.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(rw, r)
 
+			duration := time.Since(start)
+
 			log.Info("HTTP request",
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
 				zap.String("request_id", middleware.GetReqID(r.Context())),
 				zap.Int("status", rw.status),
 				zap.Int("size", rw.size),
-				zap.Duration("duration", time.Since(start)),
+				zap.Int64("duration_ms", duration.Milliseconds()),
 				zap.String("ip", r.RemoteAddr),
 			)
 		})

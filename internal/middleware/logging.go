@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	"go.uber.org/zap"
 	"net/http"
 	"time"

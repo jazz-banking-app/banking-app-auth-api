@@ -18,14 +18,16 @@ var (
 )
 
 type AuthService struct {
-	userRepo  *repository.UserRepository
-	jwtManager *jwt.JWTManager
+	userRepo     *repository.UserRepository
+	jwtManager   *jwt.JWTManager
+	logoutService *LogoutService
 }
 
-func NewAuthService(userRepo *repository.UserRepository, jwtManager *jwt.JWTManager) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository, jwtManager *jwt.JWTManager, logoutService *LogoutService) *AuthService {
 	return &AuthService{
-		userRepo:   userRepo,
-		jwtManager: jwtManager,
+		userRepo:      userRepo,
+		jwtManager:    jwtManager,
+		logoutService: logoutService,
 	}
 }
 
@@ -90,14 +92,32 @@ func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*model.Use
 }
 
 func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*jwt.TokenPair, error) {
-	userID, err := s.jwtManager.ValidateRefresh(refreshToken)
+	claims, err := s.jwtManager.ValidateRefreshWithJTI(refreshToken)
 	if err != nil {
 		return nil, err
+	}
+
+	isBlacklisted, err := s.logoutService.IsRefreshTokenBlacklisted(ctx, claims.ID)
+	if err != nil {
+		return nil, err
+	}
+	if isBlacklisted {
+		return nil, errors.New("refresh token revoked")
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		return nil, ErrInvalidCredentials
 	}
 
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
+	}
+
+	err = s.logoutService.BlacklistRefreshToken(ctx, claims.ID)
+	if err != nil {
+		return nil, err
 	}
 
 	return s.jwtManager.Generate(user.ID, user.Phone)

@@ -11,10 +11,16 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
-	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"go.uber.org/zap"
+)
+
+const (
+	AccessTokenCookieName  = "access_token"
+	RefreshTokenCookieName = "refresh_token"
+	TokenCookieMaxAge      = 900
+	RefreshTokenMaxAge     = 604800
 )
 
 var validate *validator.Validate
@@ -27,7 +33,7 @@ func init() {
 		matched, _ := regexp.MatchString(`^\+7\d{10}$`, phone)
 		return matched
 	})
-	
+
 	validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
 		password := fl.Field().String()
 		if len(password) < 8 {
@@ -61,19 +67,8 @@ type LoginRequest struct {
 	Password string `json:"password" validate:"required,password"`
 }
 
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
-}
-
 type AuthResponse struct {
-	User         *model.User `json:"user,omitempty"`
-	AccessToken  string      `json:"access_token,omitempty"`
-	RefreshToken string      `json:"refresh_token,omitempty"`
-}
-
-type TokensResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+	User *model.User `json:"user,omitempty"`
 }
 
 type ErrorResponse struct {
@@ -103,7 +98,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if err := validate.Struct(req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		
+
 		var errMsg string
 		for _, err := range err.(validator.ValidationErrors) {
 			if err.Field() == "Phone" {
@@ -143,12 +138,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		zap.String("phone", req.Phone),
 	)
 
+	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(AuthResponse{
-		User:         tokens.User,
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
+		User: tokens.User,
 	})
 }
 
@@ -175,7 +170,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := validate.Struct(req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		
+
 		var errMsg string
 		for _, err := range err.(validator.ValidationErrors) {
 			if err.Field() == "Phone" {
@@ -214,80 +209,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		zap.String("phone", req.Phone),
 	)
 
+	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(AuthResponse{
-		User:         tokens.User,
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
+		User: tokens.User,
 	})
-}
-
-// Refresh godoc
-// @Summary Refresh access token
-// @Description Get new access token using refresh token
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param request body RefreshRequest true "Refresh token"
-// @Success 200 {object} TokensResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Router /auth/refresh [post]
-func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid request body"})
-		return
-	}
-
-	if err := validate.Struct(req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "refresh_token is required"})
-		return
-	}
-
-	tokens, err := h.authService.RefreshTokens(r.Context(), req.RefreshToken)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid refresh token"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tokens)
-}
-
-// GetMe godoc
-// @Summary Get current user
-// @Description Get authenticated user information
-// @Tags auth
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} AuthResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Router /auth/me [get]
-func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "unauthorized"})
-		return
-	}
-
-	user, err := h.authService.GetUserByID(r.Context(), userID)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "user not found"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(AuthResponse{User: user})
 }

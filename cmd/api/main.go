@@ -29,6 +29,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/database"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/handler"
@@ -90,11 +91,13 @@ func main() {
 	)
 
 	userRepo := repository.NewUserRepository(postgres.Pool)
-	authService := service.NewAuthService(userRepo, jwtManager)
+	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
+	authService := service.NewAuthService(userRepo, jwtManager, logoutService)
 	authHandler := handler.NewAuthHandler(authService, log)
 
-	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL)
 	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager)
+
+	rateLimiter := appMiddleware.NewRateLimiter(redis.Client, 5, 15*time.Minute, log.Logger)
 
 	r := chi.NewRouter()
 
@@ -102,6 +105,12 @@ func main() {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+	}))
 
 	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.Handler(
@@ -114,7 +123,7 @@ func main() {
 
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
-			r.Post("/login", authHandler.Login)
+			r.Post("/login", rateLimiter.LoginRateLimit(http.HandlerFunc(authHandler.Login)).ServeHTTP)
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/logout", logoutHandler.Logout)
 

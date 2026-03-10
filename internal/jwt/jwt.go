@@ -122,3 +122,19 @@ func (m *JWTManager) ValidateRefresh(tokenString string) (uuid.UUID, error) {
 
 	return userID, nil
 }
+
+func (m *JWTManager) ValidateRefreshWithJTI(tokenString string) (*jwt.RegisteredClaims, error) {
+	claims := &jwt.RegisteredClaims{}
+	_, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return []byte(m.secretKey), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return claims, nil
+}

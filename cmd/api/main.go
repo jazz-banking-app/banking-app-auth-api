@@ -11,11 +11,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/joho/godotenv"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/database"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	appMiddleware "github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
@@ -108,3 +108,4 @@ func readyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Ready"))
 }
+	

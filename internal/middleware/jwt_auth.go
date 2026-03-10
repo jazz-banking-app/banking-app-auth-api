@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +18,7 @@ const (
 	PhoneContextKey  contextKey = "phone"
 )
 
-func JWTAuth(jwtManager *jwt.JWTManager, log *zap.Logger) func(http.Handler) http.Handler {
+func JWTAuth(jwtManager *jwt.JWTManager, log *zap.Logger, logoutService *service.LogoutService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -36,6 +37,17 @@ func JWTAuth(jwtManager *jwt.JWTManager, log *zap.Logger) func(http.Handler) htt
 			if err != nil {
 				log.Warn("invalid token", zap.Error(err))
 				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+
+			isBlacklisted, err := logoutService.IsTokenBlacklisted(r.Context(), claims.ID)
+			if err != nil {
+				log.Warn("failed to check blacklist", zap.Error(err))
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			if isBlacklisted {
+				http.Error(w, "token revoked", http.StatusUnauthorized)
 				return
 			}
 

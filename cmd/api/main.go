@@ -52,6 +52,17 @@ func main() {
 	}
 	defer postgres.Close()
 
+	redis, err := database.NewRedis(
+		cfg.Redis.Host,
+		cfg.Redis.Port,
+		cfg.Redis.Password,
+		cfg.Redis.DB,
+	)
+	if err != nil {
+		log.Fatal("failed to connect to Redis", zap.Error(err))
+	}
+	defer redis.Close()
+
 	jwtManager := jwt.NewJWTManager(
 		cfg.JWT.Secret,
 		cfg.JWT.AccessTokenTTL,
@@ -61,6 +72,9 @@ func main() {
 	userRepo := repository.NewUserRepository(postgres.Pool)
 	authService := service.NewAuthService(userRepo, jwtManager)
 	authHandler := handler.NewAuthHandler(authService)
+
+	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL)
+	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager)
 
 	r := chi.NewRouter()
 
@@ -77,9 +91,10 @@ func main() {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
-			
+			r.Post("/logout", logoutHandler.Logout)
+
 			r.Group(func(r chi.Router) {
-				r.Use(appMiddleware.JWTAuth(jwtManager, log.Logger))
+				r.Use(appMiddleware.JWTAuth(jwtManager, log.Logger, logoutService))
 				r.Get("/me", authHandler.GetMe)
 			})
 		})

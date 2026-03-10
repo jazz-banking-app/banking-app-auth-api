@@ -13,13 +13,14 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/database"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/handler"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	appMiddleware "github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
-	"github.com/joho/godotenv"
-	"go.uber.org/zap"
-	"github.com/jazzbonezz/banking-app-auth-api/internal/handler"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/repository"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
+	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -51,6 +52,16 @@ func main() {
 	}
 	defer postgres.Close()
 
+	jwtManager := jwt.NewJWTManager(
+		cfg.JWT.Secret,
+		cfg.JWT.AccessTokenTTL,
+		cfg.JWT.RefreshTokenTTL,
+	)
+
+	userRepo := repository.NewUserRepository(postgres.Pool)
+	authService := service.NewAuthService(userRepo, jwtManager)
+	authHandler := handler.NewAuthHandler(authService)
+
 	r := chi.NewRouter()
 
 	r.Use(chiMiddleware.RequestID)
@@ -58,18 +69,19 @@ func main() {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
 
-	userRepo := repository.NewUserRepository(postgres.Pool)
-	authService := service.NewAuthService(userRepo)
-	authHandler := handler.NewAuthHandler(authService)
-
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", healthHandler)
 		r.Get("/ready", readyHandler)
-		
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
-			r.Get("/me", authHandler.GetMe)
+			r.Post("/refresh", authHandler.Refresh)
+			
+			r.Group(func(r chi.Router) {
+				r.Use(appMiddleware.JWTAuth(jwtManager, log.Logger))
+				r.Get("/me", authHandler.GetMe)
+			})
 		})
 	})
 

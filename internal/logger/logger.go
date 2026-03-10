@@ -36,7 +36,6 @@ func (l *Logger) Sync() error {
 	return l.Logger.Sync()
 }
 
-// Helper functions
 func (l *Logger) Info(msg string, fields ...zap.Field) {
 	l.Logger.Info(msg, fields...)
 }

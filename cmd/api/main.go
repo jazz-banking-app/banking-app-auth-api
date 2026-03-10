@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/database"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	appMiddleware "github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"go.uber.org/zap"
@@ -25,6 +26,20 @@ func main() {
 
 	log := logger.New("info")
 	defer log.Sync()
+
+	ctx := context.Background()
+
+	postgres, err := database.NewPostgres(ctx, cfg.Postgres)
+	if err != nil {
+		log.Fatal("failed to connect to PostgreSQL", zap.Error(err))
+	}
+	defer postgres.Close()
+
+	redis, err := database.NewRedis(ctx, cfg.Redis)
+	if err != nil {
+		log.Fatal("failed to connect to Redis", zap.Error(err))
+	}
+	defer redis.Close()
 
 	r := chi.NewRouter()
 

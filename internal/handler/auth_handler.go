@@ -4,11 +4,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 )
+
+var validate *validator.Validate
+
+func init() {
+	validate = validator.New()
+
+	validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
+		phone := fl.Field().String()
+		matched, _ := regexp.MatchString(`^\+7\d{10}$`, phone)
+		return matched
+	})
+	
+	validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
+		password := fl.Field().String()
+		if len(password) < 8 {
+			return false
+		}
+		hasDigit := regexp.MustCompile(`\d`).MatchString(password)
+		hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(password)
+		return hasDigit && hasSpecial
+	})
+}
 
 type AuthHandler struct {
 	authService *service.AuthService
@@ -21,23 +45,23 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 }
 
 type RegisterRequest struct {
-	Phone    string `json:"phone"`
-	Password string `json:"password"`
+	Phone    string `json:"phone" validate:"required,phone"`
+	Password string `json:"password" validate:"required,password"`
 }
 
 type LoginRequest struct {
-	Phone    string `json:"phone"`
-	Password string `json:"password"`
+	Phone    string `json:"phone" validate:"required,phone"`
+	Password string `json:"password" validate:"required,password"`
 }
 
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
 type AuthResponse struct {
-	User         *model.User `json:"user"`
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
+	User         *model.User `json:"user,omitempty"`
+	AccessToken  string      `json:"access_token,omitempty"`
+	RefreshToken string      `json:"refresh_token,omitempty"`
 }
 
 type TokensResponse struct {
@@ -45,14 +69,32 @@ type TokensResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-type UserResponse struct {
-	User *model.User `json:"user"`
+type ErrorResponse struct {
+	Error string `json:"error"`
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid request body"})
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		
+		var errMsg string
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Field() == "Phone" {
+				errMsg = "invalid phone format, expected +7XXXXXXXXXX"
+			} else if err.Field() == "Password" {
+				errMsg = "password must be at least 8 characters with digits and special characters"
+			}
+		}
+		json.NewEncoder(w).Encode(ErrorResponse{Error: errMsg})
 		return
 	}
 
@@ -61,10 +103,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Register error:", err)
 
 		if err == service.ErrUserAlreadyExists {
-			http.Error(w, "user already exists", http.StatusConflict)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "user already exists"})
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "internal error"})
 		return
 	}
 
@@ -80,17 +126,39 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid request body"})
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		
+		var errMsg string
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Field() == "Phone" {
+				errMsg = "invalid phone format, expected +7XXXXXXXXXX"
+			} else if err.Field() == "Password" {
+				errMsg = "password must be at least 8 characters with digits and special characters"
+			}
+		}
+		json.NewEncoder(w).Encode(ErrorResponse{Error: errMsg})
 		return
 	}
 
 	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password)
 	if err != nil {
 		if err == service.ErrInvalidCredentials {
-			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid credentials"})
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "internal error"})
 		return
 	}
 
@@ -105,13 +173,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid request body"})
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "refresh_token is required"})
 		return
 	}
 
 	tokens, err := h.authService.RefreshTokens(r.Context(), req.RefreshToken)
 	if err != nil {
-		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid refresh token"})
 		return
 	}
 
@@ -122,16 +201,20 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "unauthorized"})
 		return
 	}
 
 	user, err := h.authService.GetUserByID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "user not found"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(UserResponse{User: user})
+	json.NewEncoder(w).Encode(AuthResponse{User: user})
 }

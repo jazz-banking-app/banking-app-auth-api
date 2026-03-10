@@ -1,0 +1,210 @@
+basePath: /api
+definitions:
+  github_com_jazzbonezz_banking-app-auth-api_internal_model.User:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      phone:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_handler.AuthResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/github_com_jazzbonezz_banking-app-auth-api_internal_model.User'
+    type: object
+  internal_handler.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_handler.LoginRequest:
+    properties:
+      password:
+        type: string
+      phone:
+        type: string
+    required:
+    - password
+    - phone
+    type: object
+  internal_handler.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  internal_handler.RegisterRequest:
+    properties:
+      password:
+        type: string
+      phone:
+        type: string
+    required:
+    - password
+    - phone
+    type: object
+  internal_handler.TokensResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+host: localhost:8081
+info:
+  contact:
+    email: support@abank.ru
+    name: API Support
+  description: Authentication service for A-Bank banking application
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: A-Bank Auth API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Login with phone and password
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      summary: User login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Logout and revoke current token
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: User logout
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Get authenticated user information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Get new access token using refresh token
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.TokensResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with phone and password
+      parameters:
+      - description: Registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      summary: Register new user
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

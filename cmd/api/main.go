@@ -1,5 +1,23 @@
 package main
 
+// @title A-Bank Auth API
+// @version 1.0
+// @description Authentication service for A-Bank banking application
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.email support@abank.ru
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8081
+// @BasePath /api
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+
 import (
 	"context"
 	"fmt"
@@ -20,6 +38,8 @@ import (
 	"github.com/jazzbonezz/banking-app-auth-api/internal/repository"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"github.com/joho/godotenv"
+	"github.com/swaggo/http-swagger/v2"
+	_ "github.com/jazzbonezz/banking-app-auth-api/docs"
 	"go.uber.org/zap"
 )
 
@@ -82,6 +102,11 @@ func main() {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
+
+	// Swagger UI
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8081/swagger/doc.json"),
+	))
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", healthHandler)

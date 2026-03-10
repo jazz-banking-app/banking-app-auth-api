@@ -1,5 +1,9 @@
 package handler
 
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+
 import (
 	"encoding/json"
 	"fmt"
@@ -73,6 +77,17 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// Register godoc
+// @Summary Register new user
+// @Description Register a new user with phone and password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body RegisterRequest true "Registration data"
+// @Success 201 {object} AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Router /auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -123,6 +138,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Login godoc
+// @Summary User login
+// @Description Login with phone and password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body LoginRequest true "Login credentials"
+// @Success 200 {object} AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Router /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -170,6 +196,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Refresh godoc
+// @Summary Refresh access token
+// @Description Get new access token using refresh token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body RefreshRequest true "Refresh token"
+// @Success 200 {object} TokensResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Router /auth/refresh [post]
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -198,6 +235,16 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(tokens)
 }
 
+// GetMe godoc
+// @Summary Get current user
+// @Description Get authenticated user information
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} AuthResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /auth/me [get]
 func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {

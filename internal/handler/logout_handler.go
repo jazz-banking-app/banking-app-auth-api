@@ -21,6 +21,15 @@ func NewLogoutHandler(logoutService *service.LogoutService, jwtManager *jwt.JWTM
 	}
 }
 
+// Logout godoc
+// @Summary User logout
+// @Description Logout and revoke current token
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 204
+// @Failure 401 {object} ErrorResponse
+// @Router /auth/logout [post]
 func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {

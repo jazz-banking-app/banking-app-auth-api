@@ -17,6 +17,9 @@ import (
 	appMiddleware "github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/handler"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/repository"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 )
 
 func main() {
@@ -48,12 +51,6 @@ func main() {
 	}
 	defer postgres.Close()
 
-	redis, err := database.NewRedis(ctx, cfg.Redis)
-	if err != nil {
-		log.Fatal("failed to connect to Redis", zap.Error(err))
-	}
-	defer redis.Close()
-
 	r := chi.NewRouter()
 
 	r.Use(chiMiddleware.RequestID)
@@ -61,9 +58,19 @@ func main() {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
 
+	userRepo := repository.NewUserRepository(postgres.Pool)
+	authService := service.NewAuthService(userRepo)
+	authHandler := handler.NewAuthHandler(authService)
+
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", healthHandler)
 		r.Get("/ready", readyHandler)
+		
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", authHandler.Register)
+			r.Post("/login", authHandler.Login)
+			r.Get("/me", authHandler.GetMe)
+		})
 	})
 
 	addr := fmt.Sprintf("%s:%s", cfg.HTTP.Host, cfg.HTTP.Port)
@@ -108,4 +115,3 @@ func readyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Ready"))
 }
-	

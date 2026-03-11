@@ -21,16 +21,22 @@ const (
 func JWTAuth(jwtManager *jwt.JWTManager, log *zap.Logger, logoutService *service.LogoutService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var tokenString string
+			
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "missing authorization header", http.StatusUnauthorized)
-				return
-			}
-
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			if tokenString == authHeader {
-				http.Error(w, "invalid authorization format", http.StatusUnauthorized)
-				return
+			if authHeader != "" {
+				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+				if tokenString == authHeader {
+					http.Error(w, "invalid authorization format", http.StatusUnauthorized)
+					return
+				}
+			} else {
+				cookie, err := r.Cookie("access_token")
+				if err != nil || cookie.Value == "" {
+					http.Error(w, "missing authorization header or cookie", http.StatusUnauthorized)
+					return
+				}
+				tokenString = cookie.Value
 			}
 
 			claims, err := jwtManager.Validate(tokenString)

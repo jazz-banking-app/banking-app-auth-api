@@ -18,16 +18,23 @@ var (
 )
 
 type AuthService struct {
-	userRepo     *repository.UserRepository
-	jwtManager   *jwt.JWTManager
+	userRepo      *repository.UserRepository
+	jwtManager    *jwt.JWTManager
 	logoutService *LogoutService
+	auditLogRepo  *repository.AuditLogRepository
 }
 
-func NewAuthService(userRepo *repository.UserRepository, jwtManager *jwt.JWTManager, logoutService *LogoutService) *AuthService {
+func NewAuthService(
+	userRepo *repository.UserRepository,
+	jwtManager *jwt.JWTManager,
+	logoutService *LogoutService,
+	auditLogRepo *repository.AuditLogRepository,
+) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
 		jwtManager:    jwtManager,
 		logoutService: logoutService,
+		auditLogRepo:  auditLogRepo,
 	}
 }
 
@@ -58,6 +65,14 @@ func (s *AuthService) Register(ctx context.Context, phone, password string) (*Au
 		return nil, err
 	}
 
+	s.auditLogRepo.Create(ctx, &model.AuditLog{
+		UserID:    &user.ID,
+		Action:    model.AuditActionRegister,
+		IPAddress: "",
+		UserAgent: "",
+		Metadata:  map[string]any{"phone": phone},
+	})
+
 	return &AuthTokens{
 		User:         user,
 		AccessToken:  tokens.AccessToken,
@@ -68,10 +83,24 @@ func (s *AuthService) Register(ctx context.Context, phone, password string) (*Au
 func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthTokens, error) {
 	user, err := s.userRepo.GetByPhone(ctx, phone)
 	if err != nil {
+		s.auditLogRepo.Create(ctx, &model.AuditLog{
+			UserID:    nil,
+			Action:    model.AuditActionLoginFailed,
+			IPAddress: "",
+			UserAgent: "",
+			Metadata:  map[string]any{"phone": phone, "error": "user not found"},
+		})
 		return nil, ErrInvalidCredentials
 	}
 
 	if !checkPassword(user.PasswordHash, password) {
+		s.auditLogRepo.Create(ctx, &model.AuditLog{
+			UserID:    &user.ID,
+			Action:    model.AuditActionLoginFailed,
+			IPAddress: "",
+			UserAgent: "",
+			Metadata:  map[string]any{"phone": phone, "error": "invalid password"},
+		})
 		return nil, ErrInvalidCredentials
 	}
 
@@ -79,6 +108,14 @@ func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthT
 	if err != nil {
 		return nil, err
 	}
+
+	s.auditLogRepo.Create(ctx, &model.AuditLog{
+		UserID:    &user.ID,
+		Action:    model.AuditActionLoginSuccess,
+		IPAddress: "",
+		UserAgent: "",
+		Metadata:  map[string]any{"phone": phone},
+	})
 
 	return &AuthTokens{
 		User:         user,

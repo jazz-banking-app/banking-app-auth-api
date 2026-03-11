@@ -9,7 +9,7 @@ func (h *AuthHandler) setAuthCookies(w http.ResponseWriter, accessToken, refresh
 		MaxAge:   TokenCookieMaxAge,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 
@@ -19,7 +19,7 @@ func (h *AuthHandler) setAuthCookies(w http.ResponseWriter, accessToken, refresh
 		MaxAge:   RefreshTokenMaxAge,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 }
@@ -31,7 +31,7 @@ func (h *AuthHandler) clearAuthCookies(w http.ResponseWriter) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 
@@ -41,7 +41,7 @@ func (h *AuthHandler) clearAuthCookies(w http.ResponseWriter) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 }

@@ -91,8 +91,9 @@ func main() {
 	)
 
 	userRepo := repository.NewUserRepository(postgres.Pool)
+	auditLogRepo := repository.NewAuditLogRepository(postgres.Pool)
 	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
-	authService := service.NewAuthService(userRepo, jwtManager, logoutService)
+	authService := service.NewAuthService(userRepo, jwtManager, logoutService, auditLogRepo)
 	authHandler := handler.NewAuthHandler(authService, log)
 
 	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager)

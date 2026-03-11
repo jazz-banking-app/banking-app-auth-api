@@ -56,8 +56,10 @@ func NewAuthHandler(authService *service.AuthService, log *logger.Logger) *AuthH
 }
 
 type RegisterRequest struct {
-	Phone    string `json:"phone" validate:"required,phone"`
-	Password string `json:"password" validate:"required,password"`
+	Phone     string `json:"phone" validate:"required,phone"`
+	FirstName string `json:"first_name" validate:"required,min=2,max=100"`
+	LastName  string `json:"last_name" validate:"required,min=2,max=100"`
+	Password  string `json:"password" validate:"required,password"`
 }
 
 type LoginRequest struct {
@@ -109,7 +111,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := h.authService.Register(r.Context(), req.Phone, req.Password)
+	tokens, err := h.authService.Register(r.Context(), req.Phone, req.FirstName, req.LastName, req.Password)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
 			h.log.Warn("user registration failed",

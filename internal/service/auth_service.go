@@ -47,7 +47,7 @@ type AuthTokens struct {
 	RefreshToken string      `json:"refresh_token"`
 }
 
-func (s *AuthService) Register(ctx context.Context, phone, password string) (*AuthTokens, error) {
+func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, password string) (*AuthTokens, error) {
 	existing, err := s.userRepo.GetByPhone(ctx, phone)
 	if err == nil && existing != nil {
 		return nil, ErrUserAlreadyExists
@@ -58,7 +58,7 @@ func (s *AuthService) Register(ctx context.Context, phone, password string) (*Au
 		return nil, err
 	}
 
-	user, err := s.userRepo.Create(ctx, phone, passwordHash)
+	user, err := s.userRepo.Create(ctx, phone, firstName, lastName, passwordHash)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *AuthService) Register(ctx context.Context, phone, password string) (*Au
 		Action:    model.AuditActionRegister,
 		IPAddress: "",
 		UserAgent: "",
-		Metadata:  map[string]any{"phone": phone},
+		Metadata:  map[string]any{"phone": phone, "first_name": firstName, "last_name": lastName},
 	})
 
 	return &AuthTokens{

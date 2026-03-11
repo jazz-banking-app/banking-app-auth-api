@@ -37,13 +37,19 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "missing authorization header", http.StatusUnauthorized)
-		return
-	}
+	var tokenString string
 
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+	} else {
+		cookie, err := r.Cookie("access_token")
+		if err != nil || cookie.Value == "" {
+			http.Error(w, "missing token", http.StatusUnauthorized)
+			return
+		}
+		tokenString = cookie.Value
+	}
 
 	claims, err := h.jwtManager.Validate(tokenString)
 	if err != nil {
@@ -68,7 +74,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 
@@ -78,7 +84,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 

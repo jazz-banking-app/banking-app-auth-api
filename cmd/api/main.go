@@ -126,11 +126,11 @@ func main() {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", rateLimiter.LoginRateLimit(http.HandlerFunc(authHandler.Login)).ServeHTTP)
 			r.Post("/refresh", authHandler.Refresh)
-			r.Post("/logout", logoutHandler.Logout)
 
 			r.Group(func(r chi.Router) {
 				r.Use(appMiddleware.JWTAuth(jwtManager, log.Logger, logoutService))
 				r.Get("/me", authHandler.GetMe)
+				r.Post("/logout", logoutHandler.Logout)
 			})
 		})
 	})

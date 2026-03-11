@@ -7,17 +7,20 @@ import (
 	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
+	"go.uber.org/zap"
 )
 
 type LogoutHandler struct {
 	logoutService *service.LogoutService
 	jwtManager    *jwt.JWTManager
+	log           *zap.Logger
 }
 
-func NewLogoutHandler(logoutService *service.LogoutService, jwtManager *jwt.JWTManager) *LogoutHandler {
+func NewLogoutHandler(logoutService *service.LogoutService, jwtManager *jwt.JWTManager, log *zap.Logger) *LogoutHandler {
 	return &LogoutHandler{
 		logoutService: logoutService,
 		jwtManager:    jwtManager,
+		log:           log,
 	}
 }
 
@@ -49,7 +52,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := h.jwtManager.Validate(tokenString)
+	claims, err := h.jwtManager.Validate(tokenString)  
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -62,15 +65,22 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	err = h.logoutService.Logout(r.Context(), claims.ID)
 	if err != nil {
+		h.log.Error("failed to logout access token", zap.Error(err))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	refreshCookie, err := r.Cookie(RefreshTokenCookieName)
 	if err == nil && refreshCookie.Value != "" {
+		h.log.Info("refresh token found in cookie", zap.String("jti", refreshCookie.Value))
 		if refreshClaims, err := h.jwtManager.ValidateRefreshWithJTI(refreshCookie.Value); err == nil {
+			h.log.Info("refresh token validated, blacklisting", zap.String("jti", refreshClaims.ID))
 			h.logoutService.BlacklistRefreshToken(r.Context(), refreshClaims.ID)
+		} else {
+			h.log.Warn("refresh token validation failed", zap.Error(err))
 		}
+	} else {
+		h.log.Warn("refresh token not found in cookie", zap.Error(err))
 	}
 
 	http.SetCookie(w, &http.Cookie{

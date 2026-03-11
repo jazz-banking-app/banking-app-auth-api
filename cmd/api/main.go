@@ -96,7 +96,7 @@ func main() {
 	authService := service.NewAuthService(userRepo, jwtManager, logoutService, auditLogRepo)
 	authHandler := handler.NewAuthHandler(authService, log)
 
-	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager)
+	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger)
 
 	rateLimiter := appMiddleware.NewRateLimiter(redis.Client, cfg.HTTP.RateLimitMax, cfg.HTTP.RateLimitWindow, log.Logger)
 

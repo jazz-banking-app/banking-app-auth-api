@@ -17,9 +17,7 @@ import (
 )
 
 const (
-	AccessTokenCookieName  = "access_token"
 	RefreshTokenCookieName = "refresh_token"
-	TokenCookieMaxAge      = 900
 	RefreshTokenMaxAge     = 604800
 )
 

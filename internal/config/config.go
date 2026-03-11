@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,10 +16,15 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Host         string
-	Port         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	Host           string
+	Port           string
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	AllowedOrigins []string
+	BaseURL        string
+	SwaggerURL     string
+	RateLimitMax   int
+	RateLimitWindow time.Duration
 }
 
 type PostgresConfig struct {
@@ -51,10 +57,15 @@ func Load() (*Config, error) {
 
 	return &Config{
 		HTTP: HTTPConfig{
-			Host:         getEnv("HTTP_HOST", "localhost"),
-			Port:         getEnv("HTTP_PORT", "8081"),
-			ReadTimeout:  getDurationEnv("HTTP_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout: getDurationEnv("HTTP_WRITE_TIMEOUT", 15*time.Second),
+			Host:            getEnv("HTTP_HOST", "localhost"),
+			Port:            getEnv("HTTP_PORT", "8081"),
+			ReadTimeout:     getDurationEnv("HTTP_READ_TIMEOUT", 15*time.Second),
+			WriteTimeout:    getDurationEnv("HTTP_WRITE_TIMEOUT", 15*time.Second),
+			AllowedOrigins:  strings.Split(getEnv("ALLOWED_ORIGINS", "http://localhost:3000"), ","),
+			BaseURL:         getEnv("API_BASE_URL", "http://localhost:8081"),
+			SwaggerURL:      getEnv("SWAGGER_URL", "http://localhost:8081/swagger/doc.json"),
+			RateLimitMax:    getIntEnv("RATE_LIMIT_MAX", 5),
+			RateLimitWindow: getDurationEnv("RATE_LIMIT_WINDOW", 15*time.Minute),
 		},
 		Postgres: PostgresConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -89,6 +100,15 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
+		}
+	}
+	return defaultValue
+}
+
+func getIntEnv(key string, defaultValue int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
 		}
 	}
 	return defaultValue

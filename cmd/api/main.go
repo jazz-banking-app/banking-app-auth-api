@@ -30,6 +30,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	_ "github.com/jazzbonezz/banking-app-auth-api/docs"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/config"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/database"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/handler"
@@ -39,8 +40,7 @@ import (
 	"github.com/jazzbonezz/banking-app-auth-api/internal/repository"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"github.com/joho/godotenv"
-	"github.com/swaggo/http-swagger/v2"
-	_ "github.com/jazzbonezz/banking-app-auth-api/docs"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 )
 
@@ -98,7 +98,7 @@ func main() {
 
 	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager)
 
-	rateLimiter := appMiddleware.NewRateLimiter(redis.Client, 5, 15*time.Minute, log.Logger)
+	rateLimiter := appMiddleware.NewRateLimiter(redis.Client, cfg.HTTP.RateLimitMax, cfg.HTTP.RateLimitWindow, log.Logger)
 
 	r := chi.NewRouter()
 
@@ -107,7 +107,7 @@ func main() {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedOrigins:   cfg.HTTP.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -115,7 +115,7 @@ func main() {
 
 	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8081/swagger/doc.json"),
+		httpSwagger.URL(cfg.HTTP.SwaggerURL),
 	))
 
 	r.Route("/api", func(r chi.Router) {

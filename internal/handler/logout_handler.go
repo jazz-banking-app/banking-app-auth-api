@@ -37,18 +37,16 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tokenString string
-
 	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-	} else {
-		cookie, err := r.Cookie("access_token")
-		if err != nil || cookie.Value == "" {
-			http.Error(w, "missing token", http.StatusUnauthorized)
-			return
-		}
-		tokenString = cookie.Value
+	if authHeader == "" {
+		http.Error(w, "missing token", http.StatusUnauthorized)
+		return
+	}
+
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		http.Error(w, "invalid authorization format", http.StatusUnauthorized)
+		return
 	}
 
 	claims, err := h.jwtManager.Validate(tokenString)
@@ -68,23 +66,20 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    "",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-	})
+	refreshCookie, err := r.Cookie(RefreshTokenCookieName)
+	if err == nil && refreshCookie.Value != "" {
+		if refreshClaims, err := h.jwtManager.ValidateRefreshWithJTI(refreshCookie.Value); err == nil {
+			h.logoutService.BlacklistRefreshToken(r.Context(), refreshClaims.ID)
+		}
+	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     RefreshTokenCookieName,
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
 

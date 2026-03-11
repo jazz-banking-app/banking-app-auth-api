@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
+	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/argon2"
@@ -161,11 +164,28 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 }
 
 func hashPassword(password string) (string, error) {
-	hash := argon2.IDKey([]byte(password), []byte("salt"), 1, 64*1024, 4, 32)
-	return hex.EncodeToString(hash), nil
+	salt := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return "", err
+	}
+
+	hash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+
+	return hex.EncodeToString(salt) + "$" + hex.EncodeToString(hash), nil
 }
 
 func checkPassword(hash, password string) bool {
-	expectedHash := argon2.IDKey([]byte(password), []byte("salt"), 1, 64*1024, 4, 32)
-	return hex.EncodeToString(expectedHash) == hash
+	parts := strings.Split(hash, "$")
+	if len(parts) != 2 {
+		return false
+	}
+
+	salt, err := hex.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+
+	expectedHash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+
+	return parts[1] == hex.EncodeToString(expectedHash)
 }

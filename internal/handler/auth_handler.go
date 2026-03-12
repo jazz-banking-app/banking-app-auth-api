@@ -60,6 +60,12 @@ func extractIP(r *http.Request) string {
 	return ip
 }
 
+var (
+	phoneRegex    = regexp.MustCompile(`^\+7\d{10}$`)
+	passwordRegex = regexp.MustCompile(`\d`)
+	specialRegex  = regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`)
+)
+
 var validate *validator.Validate
 
 func init() {
@@ -67,8 +73,7 @@ func init() {
 
 	validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
 		phone := fl.Field().String()
-		matched, _ := regexp.MatchString(`^\+7\d{10}$`, phone)
-		return matched
+		return phoneRegex.MatchString(phone)
 	})
 
 	validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
@@ -76,9 +81,7 @@ func init() {
 		if len(password) < 8 {
 			return false
 		}
-		hasDigit := regexp.MustCompile(`\d`).MatchString(password)
-		hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(password)
-		return hasDigit && hasSpecial
+		return passwordRegex.MatchString(password) && specialRegex.MatchString(password)
 	})
 }
 

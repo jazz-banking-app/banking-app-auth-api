@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -57,7 +58,7 @@ func (rl *RateLimiter) LoginRateLimit(next http.Handler) http.Handler {
 			)
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Retry-After", rl.window.String())
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", int64(rl.window.Seconds())))
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Write([]byte(`{"error":"too many requests, please try again later"}`))
 			return

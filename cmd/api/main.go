@@ -104,7 +104,7 @@ func main() {
 	authService.WithLogger(log.Logger)
 	authHandler := handler.NewAuthHandlerWithConfig(authService, log, cfg.HTTP.CookieSecure)
 
-	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger)
+	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger, cfg.HTTP.CookieSecure)
 
 	rateLimiter := appMiddleware.NewRateLimiter(redis.Client, cfg.HTTP.RateLimitMax, cfg.HTTP.RateLimitWindow, log.Logger)
 

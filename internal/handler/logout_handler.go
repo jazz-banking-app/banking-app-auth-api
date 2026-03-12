@@ -15,13 +15,15 @@ type LogoutHandler struct {
 	logoutService service.LogoutService
 	jwtManager    jwt.JWTManager
 	log           *zap.Logger
+	cookieSecure  bool
 }
 
-func NewLogoutHandler(logoutService service.LogoutService, jwtManager jwt.JWTManager, log *zap.Logger) *LogoutHandler {
+func NewLogoutHandler(logoutService service.LogoutService, jwtManager jwt.JWTManager, log *zap.Logger, cookieSecure bool) *LogoutHandler {
 	return &LogoutHandler{
 		logoutService: logoutService,
 		jwtManager:    jwtManager,
 		log:           log,
+		cookieSecure:  cookieSecure,
 	}
 }
 
@@ -101,7 +103,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})

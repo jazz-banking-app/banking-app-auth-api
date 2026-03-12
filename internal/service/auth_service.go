@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -186,6 +187,10 @@ func checkPassword(hash, password string) bool {
 	}
 
 	expectedHash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+	storedHash, err := hex.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
 
-	return parts[1] == hex.EncodeToString(expectedHash)
+	return subtle.ConstantTimeCompare(expectedHash, storedHash) == 1
 }

@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -145,11 +146,21 @@ func main() {
 	go func() {
 		log.Info("server starting",
 			zap.String("address", addr),
+			zap.String("swagger_url", cfg.HTTP.SwaggerURL),
+			zap.String("allowed_origins", strings.Join(cfg.HTTP.AllowedOrigins, ", ")),
 		)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("server failed", zap.Error(err))
 		}
 	}()
+
+	log.Info("configuration loaded",
+		zap.String("jwt_secret", "***"),
+		zap.Duration("jwt_access_ttl", cfg.JWT.AccessTokenTTL),
+		zap.Duration("jwt_refresh_ttl", cfg.JWT.RefreshTokenTTL),
+		zap.Int("rate_limit_max", cfg.HTTP.RateLimitMax),
+		zap.Duration("rate_limit_window", cfg.HTTP.RateLimitWindow),
+	)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

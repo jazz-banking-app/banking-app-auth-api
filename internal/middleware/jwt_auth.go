@@ -17,6 +17,7 @@ type contextKey string
 const (
 	UserIDContextKey contextKey = "user_id"
 	PhoneContextKey  contextKey = "phone"
+	TokenJTIContextKey contextKey = "token_jti"
 )
 
 type ErrorResponse struct {
@@ -68,6 +69,7 @@ func JWTAuth(jwtManager jwt.JWTManager, log *zap.Logger, logoutService service.L
 
 			ctx := context.WithValue(r.Context(), UserIDContextKey, claims.UserID)
 			ctx = context.WithValue(ctx, PhoneContextKey, claims.Phone)
+			ctx = context.WithValue(ctx, TokenJTIContextKey, claims.ID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -82,4 +84,9 @@ func GetUserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 func GetPhoneFromContext(ctx context.Context) (string, bool) {
 	phone, ok := ctx.Value(PhoneContextKey).(string)
 	return phone, ok
+}
+
+func GetTokenJTIFromContext(ctx context.Context) (string, bool) {
+	jti, ok := ctx.Value(TokenJTIContextKey).(string)
+	return jti, ok
 }

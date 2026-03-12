@@ -17,35 +17,35 @@ import (
 	"go.uber.org/zap"
 )
 
-type MockLogoutServiceForLogout struct {
+type MockLogoutServiceForTest struct {
 	mock.Mock
 }
 
-func (m *MockLogoutServiceForLogout) Logout(ctx context.Context, tokenJTI string) error {
+func (m *MockLogoutServiceForTest) Logout(ctx context.Context, tokenJTI string) error {
 	args := m.Called(ctx, tokenJTI)
 	return args.Error(0)
 }
 
-func (m *MockLogoutServiceForLogout) IsTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
+func (m *MockLogoutServiceForTest) IsTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
 	args := m.Called(ctx, tokenJTI)
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockLogoutServiceForLogout) BlacklistRefreshToken(ctx context.Context, tokenJTI string) error {
+func (m *MockLogoutServiceForTest) BlacklistRefreshToken(ctx context.Context, tokenJTI string) error {
 	args := m.Called(ctx, tokenJTI)
 	return args.Error(0)
 }
 
-func (m *MockLogoutServiceForLogout) IsRefreshTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
+func (m *MockLogoutServiceForTest) IsRefreshTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
 	args := m.Called(ctx, tokenJTI)
 	return args.Bool(0), args.Error(1)
 }
 
-type MockJWTManagerForLogout struct {
+type MockJWTManagerForTest struct {
 	mock.Mock
 }
 
-func (m *MockJWTManagerForLogout) Generate(userID uuid.UUID, phone string) (*jwt.TokenPair, error) {
+func (m *MockJWTManagerForTest) Generate(userID uuid.UUID, phone string) (*jwt.TokenPair, error) {
 	args := m.Called(userID, phone)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -53,7 +53,7 @@ func (m *MockJWTManagerForLogout) Generate(userID uuid.UUID, phone string) (*jwt
 	return args.Get(0).(*jwt.TokenPair), args.Error(1)
 }
 
-func (m *MockJWTManagerForLogout) Validate(tokenString string) (*jwt.Claims, error) {
+func (m *MockJWTManagerForTest) Validate(tokenString string) (*jwt.Claims, error) {
 	args := m.Called(tokenString)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -61,12 +61,12 @@ func (m *MockJWTManagerForLogout) Validate(tokenString string) (*jwt.Claims, err
 	return args.Get(0).(*jwt.Claims), args.Error(1)
 }
 
-func (m *MockJWTManagerForLogout) ValidateRefresh(tokenString string) (uuid.UUID, error) {
+func (m *MockJWTManagerForTest) ValidateRefresh(tokenString string) (uuid.UUID, error) {
 	args := m.Called(tokenString)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockJWTManagerForLogout) ValidateRefreshWithJTI(tokenString string) (*jwtv5.RegisteredClaims, error) {
+func (m *MockJWTManagerForTest) ValidateRefreshWithJTI(tokenString string) (*jwtv5.RegisteredClaims, error) {
 	args := m.Called(tokenString)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -75,22 +75,19 @@ func (m *MockJWTManagerForLogout) ValidateRefreshWithJTI(tokenString string) (*j
 }
 
 func TestLogoutHandler_Logout_Success(t *testing.T) {
-	mockLogoutService := new(MockLogoutServiceForLogout)
-	mockJWTManager := new(MockJWTManagerForLogout)
+	mockLogoutService := new(MockLogoutServiceForTest)
+	mockJWTManager := new(MockJWTManagerForTest)
 	log, _ := zap.NewDevelopment()
 	h := handler.NewLogoutHandler(mockLogoutService, mockJWTManager, log, false)
 
 	userID := uuid.New()
-	claims := &jwt.Claims{
-		UserID: userID,
-	}
+	tokenJTI := "test-jti"
 
-	mockJWTManager.On("Validate", "valid-token").Return(claims, nil)
-	mockLogoutService.On("Logout", mock.Anything, mock.Anything).Return(nil)
+	mockLogoutService.On("Logout", mock.Anything, tokenJTI).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
 	ctx := context.WithValue(req.Context(), middleware.UserIDContextKey, userID)
+	ctx = context.WithValue(ctx, middleware.TokenJTIContextKey, tokenJTI)
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
@@ -100,9 +97,9 @@ func TestLogoutHandler_Logout_Success(t *testing.T) {
 	mockLogoutService.AssertExpectations(t)
 }
 
-func TestLogoutHandler_Logout_NoAuthHeader(t *testing.T) {
-	mockLogoutService := new(MockLogoutServiceForLogout)
-	mockJWTManager := new(MockJWTManagerForLogout)
+func TestLogoutHandler_Logout_NoContext(t *testing.T) {
+	mockLogoutService := new(MockLogoutServiceForTest)
+	mockJWTManager := new(MockJWTManagerForTest)
 	log, _ := zap.NewDevelopment()
 	h := handler.NewLogoutHandler(mockLogoutService, mockJWTManager, log, false)
 
@@ -119,54 +116,31 @@ func TestLogoutHandler_Logout_NoAuthHeader(t *testing.T) {
 	assert.Equal(t, "unauthorized", response.Error)
 }
 
-func TestLogoutHandler_Logout_InvalidToken(t *testing.T) {
-	mockLogoutService := new(MockLogoutServiceForLogout)
-	mockJWTManager := new(MockJWTManagerForLogout)
+func TestLogoutHandler_Logout_LogoutError(t *testing.T) {
+	mockLogoutService := new(MockLogoutServiceForTest)
+	mockJWTManager := new(MockJWTManagerForTest)
 	log, _ := zap.NewDevelopment()
 	h := handler.NewLogoutHandler(mockLogoutService, mockJWTManager, log, false)
 
-	mockJWTManager.On("Validate", "invalid-token").Return((*jwt.Claims)(nil), assert.AnError)
+	userID := uuid.New()
+	tokenJTI := "test-jti"
+
+	mockLogoutService.On("Logout", mock.Anything, tokenJTI).Return(assert.AnError)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	req.Header.Set("Authorization", "Bearer invalid-token")
-	w := httptest.NewRecorder()
-
-	h.Logout(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-
-	var response handler.ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "unauthorized", response.Error)
-}
-
-func TestLogoutHandler_Logout_TokenMismatch(t *testing.T) {
-	mockLogoutService := new(MockLogoutServiceForLogout)
-	mockJWTManager := new(MockJWTManagerForLogout)
-	log, _ := zap.NewDevelopment()
-	h := handler.NewLogoutHandler(mockLogoutService, mockJWTManager, log, false)
-
-	wrongUserID := uuid.New()
-	claims := &jwt.Claims{
-		UserID: wrongUserID,
-	}
-
-	mockJWTManager.On("Validate", "valid-token").Return(claims, nil)
-
-	reqUserID := uuid.New()
-	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
-	ctx := context.WithValue(req.Context(), middleware.UserIDContextKey, reqUserID)
+	ctx := context.WithValue(req.Context(), middleware.UserIDContextKey, userID)
+	ctx = context.WithValue(ctx, middleware.TokenJTIContextKey, tokenJTI)
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	h.Logout(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 	var response handler.ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "token mismatch", response.Error)
+	assert.Equal(t, "internal error", response.Error)
+
+	mockLogoutService.AssertExpectations(t)
 }

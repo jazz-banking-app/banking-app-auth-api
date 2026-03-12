@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
@@ -37,7 +36,7 @@ func NewLogoutHandler(logoutService service.LogoutService, jwtManager jwt.JWTMan
 // @Failure 401 {object} ErrorResponse
 // @Router /auth/logout [post]
 func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	tokenJTI, ok := middleware.GetTokenJTIFromContext(r.Context())
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -45,38 +44,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "missing token"})
-		return
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid authorization format"})
-		return
-	}
-
-	claims, err := h.jwtManager.Validate(tokenString)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid token"})
-		return
-	}
-
-	if claims.UserID != userID {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "token mismatch"})
-		return
-	}
-
-	err = h.logoutService.Logout(r.Context(), claims.ID)
+	err := h.logoutService.Logout(r.Context(), tokenJTI)
 	if err != nil {
 		h.log.Error("failed to logout access token", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")

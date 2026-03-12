@@ -90,7 +90,9 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		h.log.Info("refresh token found in cookie", zap.String("jti", refreshCookie.Value))
 		if refreshClaims, err := h.jwtManager.ValidateRefreshWithJTI(refreshCookie.Value); err == nil {
 			h.log.Info("refresh token validated, blacklisting", zap.String("jti", refreshClaims.ID))
-			h.logoutService.BlacklistRefreshToken(r.Context(), refreshClaims.ID)
+			if err := h.logoutService.BlacklistRefreshToken(r.Context(), refreshClaims.ID); err != nil {
+				h.log.Error("failed to blacklist refresh token", zap.Error(err))
+			}
 		} else {
 			h.log.Warn("refresh token validation failed", zap.Error(err))
 		}

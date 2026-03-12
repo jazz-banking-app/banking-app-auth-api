@@ -100,15 +100,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("refresh token not found in cookie", zap.Error(err))
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     RefreshTokenCookieName,
-		Value:    "",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   h.cookieSecure,
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-	})
+	clearAuthCookies(w, h.cookieSecure)
 
 	w.WriteHeader(http.StatusNoContent)
 }

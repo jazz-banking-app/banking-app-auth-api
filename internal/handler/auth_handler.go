@@ -194,7 +194,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		zap.String("phone", maskPhone(req.Phone)),
 	)
 
-	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+	setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken, h.cookieSecure)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -269,7 +269,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		zap.String("phone", maskPhone(req.Phone)),
 	)
 
-	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+	setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken, h.cookieSecure)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(AuthResponse{

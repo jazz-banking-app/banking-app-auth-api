@@ -113,6 +113,7 @@ func main() {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
+	r.Use(appMiddleware.RequestContextData)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.HTTP.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},

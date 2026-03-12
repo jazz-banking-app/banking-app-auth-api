@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
@@ -21,6 +22,26 @@ const (
 	RefreshTokenMaxAge     = 604800
 	MaxRequestBodySize     = 1 << 20 // 1MB
 )
+
+func extractIP(r *http.Request) string {
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+
+	xri := r.Header.Get("X-Real-IP")
+	if xri != "" {
+		return xri
+	}
+
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+
+	return ip
+}
 
 var validate *validator.Validate
 
@@ -123,7 +144,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := h.authService.Register(r.Context(), req.Phone, req.FirstName, req.LastName, req.Password)
+	ip := extractIP(r)
+	ua := r.UserAgent()
+
+	tokens, err := h.authService.Register(r.Context(), req.Phone, req.FirstName, req.LastName, req.Password, ip, ua)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
 			h.log.Warn("user registration failed",
@@ -196,7 +220,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password)
+	ip := extractIP(r)
+	ua := r.UserAgent()
+
+	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password, ip, ua)
 	if err != nil {
 		if err == service.ErrInvalidCredentials {
 			h.log.Warn("failed login attempt",

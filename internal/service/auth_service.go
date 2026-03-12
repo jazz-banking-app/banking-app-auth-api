@@ -47,7 +47,7 @@ type AuthTokens struct {
 	RefreshToken string      `json:"refresh_token"`
 }
 
-func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, password string) (*AuthTokens, error) {
+func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, password, ip, ua string) (*AuthTokens, error) {
 	existing, err := s.userRepo.GetByPhone(ctx, phone)
 	if err == nil && existing != nil {
 		return nil, ErrUserAlreadyExists
@@ -71,8 +71,8 @@ func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, 
 	s.auditLogRepo.Create(ctx, &model.AuditLog{
 		UserID:    &user.ID,
 		Action:    model.AuditActionRegister,
-		IPAddress: "",
-		UserAgent: "",
+		IPAddress: ip,
+		UserAgent: ua,
 		Metadata:  map[string]any{"phone": phone, "first_name": firstName, "last_name": lastName},
 	})
 
@@ -83,14 +83,14 @@ func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, 
 	}, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthTokens, error) {
+func (s *AuthService) Login(ctx context.Context, phone, password, ip, ua string) (*AuthTokens, error) {
 	user, err := s.userRepo.GetByPhone(ctx, phone)
 	if err != nil {
 		s.auditLogRepo.Create(ctx, &model.AuditLog{
 			UserID:    nil,
 			Action:    model.AuditActionLoginFailed,
-			IPAddress: "",
-			UserAgent: "",
+			IPAddress: ip,
+			UserAgent: ua,
 			Metadata:  map[string]any{"phone": phone, "error": "user not found"},
 		})
 		return nil, ErrInvalidCredentials
@@ -100,8 +100,8 @@ func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthT
 		s.auditLogRepo.Create(ctx, &model.AuditLog{
 			UserID:    &user.ID,
 			Action:    model.AuditActionLoginFailed,
-			IPAddress: "",
-			UserAgent: "",
+			IPAddress: ip,
+			UserAgent: ua,
 			Metadata:  map[string]any{"phone": phone, "error": "invalid password"},
 		})
 		return nil, ErrInvalidCredentials
@@ -115,8 +115,8 @@ func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthT
 	s.auditLogRepo.Create(ctx, &model.AuditLog{
 		UserID:    &user.ID,
 		Action:    model.AuditActionLoginSuccess,
-		IPAddress: "",
-		UserAgent: "",
+		IPAddress: ip,
+		UserAgent: ua,
 		Metadata:  map[string]any{"phone": phone},
 	})
 

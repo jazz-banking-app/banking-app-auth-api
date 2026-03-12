@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -87,6 +88,12 @@ func (r *UserRepositoryImpl) Update(ctx context.Context, user *model.User) error
 
 func (r *UserRepositoryImpl) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM users WHERE id = $1`
-	_, err := r.conn.Exec(ctx, query, id)
-	return err
+	result, err := r.conn.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }

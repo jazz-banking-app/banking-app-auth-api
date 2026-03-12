@@ -26,6 +26,7 @@ type HTTPConfig struct {
 	RateLimitMax    int
 	RateLimitWindow time.Duration
 	CookieSecure    bool
+	LogLevel        string
 }
 
 type PostgresConfig struct {
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 			RateLimitMax:    getIntEnv("RATE_LIMIT_MAX", 5),
 			RateLimitWindow: getDurationEnv("RATE_LIMIT_WINDOW", 15*time.Minute),
 			CookieSecure:    getEnv("COOKIE_SECURE", "false") == "true",
+			LogLevel:        getEnv("LOG_LEVEL", "info"),
 		},
 		Postgres: PostgresConfig{
 			Host:     getEnv("DB_HOST", "localhost"),

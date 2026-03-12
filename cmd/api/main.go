@@ -55,7 +55,7 @@ func main() {
 		panic(fmt.Sprintf("failed to load config: %v", err))
 	}
 
-	log := logger.New("info")
+	log := logger.New(cfg.HTTP.LogLevel)
 	defer log.Sync()
 
 	if cfg.JWT.Secret == "" {

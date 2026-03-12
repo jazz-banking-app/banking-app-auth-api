@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -20,10 +19,6 @@ const (
 	TokenJTIContextKey contextKey = "token_jti"
 )
 
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
 func JWTAuth(jwtManager jwt.JWTManager, log *zap.Logger, logoutService service.LogoutService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +26,7 @@ func JWTAuth(jwtManager jwt.JWTManager, log *zap.Logger, logoutService service.L
 			if authHeader == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: "missing authorization header"})
+				w.Write([]byte(`{"error":"missing authorization header"}`))
 				return
 			}
 
@@ -39,7 +34,7 @@ func JWTAuth(jwtManager jwt.JWTManager, log *zap.Logger, logoutService service.L
 			if tokenString == authHeader {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid authorization format"})
+				w.Write([]byte(`{"error":"invalid authorization format"}`))
 				return
 			}
 
@@ -48,7 +43,7 @@ func JWTAuth(jwtManager jwt.JWTManager, log *zap.Logger, logoutService service.L
 				log.Warn("invalid token", zap.Error(err))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid token"})
+				w.Write([]byte(`{"error":"invalid token"}`))
 				return
 			}
 
@@ -57,13 +52,13 @@ func JWTAuth(jwtManager jwt.JWTManager, log *zap.Logger, logoutService service.L
 				log.Warn("failed to check blacklist", zap.Error(err))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: "internal error"})
+				w.Write([]byte(`{"error":"internal error"}`))
 				return
 			}
 			if isBlacklisted {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: "token revoked"})
+				w.Write([]byte(`{"error":"token revoked"}`))
 				return
 			}
 

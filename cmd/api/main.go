@@ -101,6 +101,7 @@ func main() {
 		cfg.JWT.RefreshTokenTTL,
 	)
 	authService := service.NewAuthService(userRepo, jwtManager, logoutService, auditLogRepo)
+	authService.WithLogger(log.Logger)
 	authHandler := handler.NewAuthHandlerWithConfig(authService, log, cfg.HTTP.CookieSecure)
 
 	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger)

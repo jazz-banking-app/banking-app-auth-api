@@ -132,15 +132,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 
-		var errMsg string
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Field() == "Phone" {
-				errMsg = "invalid phone format, expected +7XXXXXXXXXX"
-			} else if err.Field() == "Password" {
-				errMsg = "password must be at least 8 characters with digits and special characters"
+		var errors []string
+		for _, e := range err.(validator.ValidationErrors) {
+			if e.Field() == "Phone" {
+				errors = append(errors, "invalid phone format, expected +7XXXXXXXXXX")
+			} else if e.Field() == "Password" {
+				errors = append(errors, "password must be at least 8 characters with digits and special characters")
 			}
 		}
-		json.NewEncoder(w).Encode(ErrorResponse{Error: errMsg})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: strings.Join(errors, "; ")})
 		return
 	}
 
@@ -208,15 +208,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 
-		var errMsg string
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Field() == "Phone" {
-				errMsg = "invalid phone format, expected +7XXXXXXXXXX"
-			} else if err.Field() == "Password" {
-				errMsg = "password must be at least 8 characters with digits and special characters"
+		var errors []string
+		for _, e := range err.(validator.ValidationErrors) {
+			if e.Field() == "Phone" {
+				errors = append(errors, "invalid phone format, expected +7XXXXXXXXXX")
+			} else if e.Field() == "Password" {
+				errors = append(errors, "password must be at least 8 characters with digits and special characters")
 			}
 		}
-		json.NewEncoder(w).Encode(ErrorResponse{Error: errMsg})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: strings.Join(errors, "; ")})
 		return
 	}
 

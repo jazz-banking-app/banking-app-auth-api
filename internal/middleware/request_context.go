@@ -59,3 +59,13 @@ func GetUserAgent(ctx context.Context) string {
 	}
 	return ""
 }
+
+func GetIPAddressFromContext(ctx context.Context) (string, bool) {
+	ip, ok := ctx.Value(IPAddressKey).(string)
+	return ip, ok
+}
+
+func GetUserAgentFromContext(ctx context.Context) (string, bool) {
+	ua, ok := ctx.Value(UserAgentKey).(string)
+	return ua, ok
+}

@@ -15,14 +15,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"go.uber.org/zap"
 )
 
 type AuthServiceInterface interface {
-	Register(ctx context.Context, phone, firstName, lastName, password, ip, ua string) (*service.AuthTokens, error)
-	Login(ctx context.Context, phone, password, ip, ua string) (*service.AuthTokens, error)
+	Register(ctx context.Context, phone, firstName, lastName, password string, ip, ua string) (*service.AuthTokens, error)
+	Login(ctx context.Context, phone, password string, ip, ua string) (*service.AuthTokens, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	RefreshTokens(ctx context.Context, refreshToken string) (*jwt.TokenPair, error)
 }
@@ -40,24 +41,10 @@ func maskPhone(phone string) string {
 	return phone[:2] + "****" + phone[len(phone)-2:]
 }
 
-func extractIP(r *http.Request) string {
-	xff := r.Header.Get("X-Forwarded-For")
-	if xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-
-	xri := r.Header.Get("X-Real-IP")
-	if xri != "" {
-		return xri
-	}
-
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
-
-	return ip
+func getAuditData(r *http.Request) (ip, ua string) {
+	ip, _ = middleware.GetIPAddressFromContext(r.Context())
+	ua, _ = middleware.GetUserAgentFromContext(r.Context())
+	return ip, ua
 }
 
 var (
@@ -164,8 +151,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := extractIP(r)
-	ua := r.UserAgent()
+	ip, ua := getAuditData(r)
 
 	tokens, err := h.authService.Register(r.Context(), req.Phone, req.FirstName, req.LastName, req.Password, ip, ua)
 	if err != nil {
@@ -240,8 +226,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := extractIP(r)
-	ua := r.UserAgent()
+	ip, ua := getAuditData(r)
 
 	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password, ip, ua)
 	if err != nil {

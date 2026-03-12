@@ -129,7 +129,7 @@ func main() {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", healthHandler)
-		r.Get("/ready", readyHandler)
+		r.Get("/ready", readyHandler(postgres, redis))
 
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
@@ -193,7 +193,23 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func readyHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Ready"))
+func readyHandler(postgres *database.Postgres, redis *database.Redis) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check PostgreSQL
+		if err := postgres.Pool.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("PostgreSQL unavailable"))
+			return
+		}
+
+		// Check Redis
+		if err := redis.Client.Ping(r.Context()).Err(); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Redis unavailable"))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Ready"))
+	}
 }

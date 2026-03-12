@@ -16,15 +16,16 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Host           string
-	Port           string
-	ReadTimeout    time.Duration
-	WriteTimeout   time.Duration
-	AllowedOrigins []string
-	BaseURL        string
-	SwaggerURL     string
-	RateLimitMax   int
+	Host            string
+	Port            string
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	AllowedOrigins  []string
+	BaseURL         string
+	SwaggerURL      string
+	RateLimitMax    int
 	RateLimitWindow time.Duration
+	CookieSecure    bool
 }
 
 type PostgresConfig struct {
@@ -66,6 +67,7 @@ func Load() (*Config, error) {
 			SwaggerURL:      getEnv("SWAGGER_URL", "http://localhost:8081/swagger/doc.json"),
 			RateLimitMax:    getIntEnv("RATE_LIMIT_MAX", 5),
 			RateLimitWindow: getDurationEnv("RATE_LIMIT_WINDOW", 15*time.Minute),
+			CookieSecure:    getEnv("COOKIE_SECURE", "false") == "true",
 		},
 		Postgres: PostgresConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -84,7 +86,7 @@ func Load() (*Config, error) {
 		JWT: JWTConfig{
 			AccessTokenTTL:  getDurationEnv("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getDurationEnv("JWT_REFRESH_TTL", 7*24*time.Hour),
-			Secret:          getEnv("JWT_SECRET", "change-me-in-production"),
+			Secret:          getEnv("JWT_SECRET", ""),
 		},
 	}, nil
 }

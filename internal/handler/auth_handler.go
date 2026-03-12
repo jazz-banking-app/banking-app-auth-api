@@ -19,6 +19,7 @@ import (
 const (
 	RefreshTokenCookieName = "refresh_token"
 	RefreshTokenMaxAge     = 604800
+	MaxRequestBodySize     = 1 << 20 // 1MB
 )
 
 var validate *validator.Validate
@@ -46,12 +47,22 @@ func init() {
 type AuthHandler struct {
 	authService *service.AuthService
 	log         *logger.Logger
+	cookieSecure bool
 }
 
 func NewAuthHandler(authService *service.AuthService, log *logger.Logger) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		log:         log,
+		cookieSecure: false,
+	}
+}
+
+func NewAuthHandlerWithConfig(authService *service.AuthService, log *logger.Logger, cookieSecure bool) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+		log:         log,
+		cookieSecure: cookieSecure,
 	}
 }
 
@@ -87,6 +98,7 @@ type ErrorResponse struct {
 // @Failure 409 {object} ErrorResponse
 // @Router /auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -159,6 +171,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} ErrorResponse
 // @Router /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")

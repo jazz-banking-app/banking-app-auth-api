@@ -8,7 +8,7 @@ func (h *AuthHandler) setAuthCookies(w http.ResponseWriter, _, refreshToken stri
 		Value:    refreshToken,
 		MaxAge:   RefreshTokenMaxAge,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
@@ -20,7 +20,7 @@ func (h *AuthHandler) clearAuthCookies(w http.ResponseWriter) {
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})

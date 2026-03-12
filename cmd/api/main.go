@@ -58,6 +58,13 @@ func main() {
 	log := logger.New("info")
 	defer log.Sync()
 
+	if cfg.JWT.Secret == "" {
+		log.Fatal("JWT_SECRET is required")
+	}
+	if cfg.JWT.Secret == "change-me-in-production" {
+		log.Warn("using default JWT secret - change in production!")
+	}
+
 	ctx := context.Background()
 
 	postgres, err := database.NewPostgres(
@@ -94,7 +101,7 @@ func main() {
 		cfg.JWT.RefreshTokenTTL,
 	)
 	authService := service.NewAuthService(userRepo, jwtManager, logoutService, auditLogRepo)
-	authHandler := handler.NewAuthHandler(authService, log)
+	authHandler := handler.NewAuthHandlerWithConfig(authService, log, cfg.HTTP.CookieSecure)
 
 	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger)
 

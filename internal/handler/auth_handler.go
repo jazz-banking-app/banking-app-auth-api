@@ -23,6 +23,13 @@ const (
 	MaxRequestBodySize     = 1 << 20 // 1MB
 )
 
+func maskPhone(phone string) string {
+	if len(phone) <= 4 {
+		return "****"
+	}
+	return phone[:2] + "****" + phone[len(phone)-2:]
+}
+
 func extractIP(r *http.Request) string {
 	xff := r.Header.Get("X-Forwarded-For")
 	if xff != "" {
@@ -151,7 +158,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
 			h.log.Warn("user registration failed",
-				zap.String("phone", req.Phone),
+				zap.String("phone", maskPhone(req.Phone)),
 				zap.String("reason", "user already exists"),
 			)
 			w.Header().Set("Content-Type", "application/json")
@@ -160,7 +167,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.log.Error("user registration failed",
-			zap.String("phone", req.Phone),
+			zap.String("phone", maskPhone(req.Phone)),
 			zap.Error(err),
 		)
 		w.Header().Set("Content-Type", "application/json")
@@ -171,7 +178,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Info("user registered",
 		zap.String("user_id", tokens.User.ID.String()),
-		zap.String("phone", req.Phone),
+		zap.String("phone", maskPhone(req.Phone)),
 	)
 
 	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
@@ -227,7 +234,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err == service.ErrInvalidCredentials {
 			h.log.Warn("failed login attempt",
-				zap.String("phone", req.Phone),
+				zap.String("phone", maskPhone(req.Phone)),
 			)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -235,7 +242,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.log.Error("login failed",
-			zap.String("phone", req.Phone),
+			zap.String("phone", maskPhone(req.Phone)),
 			zap.Error(err),
 		)
 		w.Header().Set("Content-Type", "application/json")
@@ -246,7 +253,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Info("user logged in",
 		zap.String("user_id", tokens.User.ID.String()),
-		zap.String("phone", req.Phone),
+		zap.String("phone", maskPhone(req.Phone)),
 	)
 
 	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)

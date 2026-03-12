@@ -84,15 +84,14 @@ func main() {
 	}
 	defer redis.Close()
 
+	userRepo := repository.NewUserRepository(postgres.Pool)
+	auditLogRepo := repository.NewAuditLogRepository(postgres.Pool)
+	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
 	jwtManager := jwt.NewJWTManager(
 		cfg.JWT.Secret,
 		cfg.JWT.AccessTokenTTL,
 		cfg.JWT.RefreshTokenTTL,
 	)
-
-	userRepo := repository.NewUserRepository(postgres.Pool)
-	auditLogRepo := repository.NewAuditLogRepository(postgres.Pool)
-	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
 	authService := service.NewAuthService(userRepo, jwtManager, logoutService, auditLogRepo)
 	authHandler := handler.NewAuthHandler(authService, log)
 

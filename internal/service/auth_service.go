@@ -21,17 +21,17 @@ var (
 )
 
 type AuthService struct {
-	userRepo      *repository.UserRepository
-	jwtManager    *jwt.JWTManager
-	logoutService *LogoutService
-	auditLogRepo  *repository.AuditLogRepository
+	userRepo      repository.UserRepository
+	jwtManager    jwt.JWTManager
+	logoutService LogoutService
+	auditLogRepo  repository.AuditLogRepository
 }
 
 func NewAuthService(
-	userRepo *repository.UserRepository,
-	jwtManager *jwt.JWTManager,
-	logoutService *LogoutService,
-	auditLogRepo *repository.AuditLogRepository,
+	userRepo repository.UserRepository,
+	jwtManager jwt.JWTManager,
+	logoutService LogoutService,
+	auditLogRepo repository.AuditLogRepository,
 ) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,

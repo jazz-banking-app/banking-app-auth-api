@@ -11,12 +11,12 @@ import (
 )
 
 type LogoutHandler struct {
-	logoutService *service.LogoutService
-	jwtManager    *jwt.JWTManager
+	logoutService service.LogoutService
+	jwtManager    jwt.JWTManager
 	log           *zap.Logger
 }
 
-func NewLogoutHandler(logoutService *service.LogoutService, jwtManager *jwt.JWTManager, log *zap.Logger) *LogoutHandler {
+func NewLogoutHandler(logoutService service.LogoutService, jwtManager jwt.JWTManager, log *zap.Logger) *LogoutHandler {
 	return &LogoutHandler{
 		logoutService: logoutService,
 		jwtManager:    jwtManager,

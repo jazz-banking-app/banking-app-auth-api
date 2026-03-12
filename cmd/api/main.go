@@ -150,6 +150,7 @@ func main() {
 		Handler:      r,
 		ReadTimeout:  cfg.HTTP.ReadTimeout,
 		WriteTimeout: cfg.HTTP.WriteTimeout,
+		IdleTimeout:  5 * time.Minute,
 	}
 
 	go func() {

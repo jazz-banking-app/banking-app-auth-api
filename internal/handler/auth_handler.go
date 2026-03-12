@@ -5,17 +5,27 @@ package handler
 // @name Authorization
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"go.uber.org/zap"
 )
+
+type AuthServiceInterface interface {
+	Register(ctx context.Context, phone, firstName, lastName, password, ip, ua string) (*service.AuthTokens, error)
+	Login(ctx context.Context, phone, password, ip, ua string) (*service.AuthTokens, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error)
+	RefreshTokens(ctx context.Context, refreshToken string) (*jwt.TokenPair, error)
+}
 
 const (
 	RefreshTokenCookieName = "refresh_token"
@@ -73,23 +83,23 @@ func init() {
 }
 
 type AuthHandler struct {
-	authService *service.AuthService
-	log         *logger.Logger
+	authService  AuthServiceInterface
+	log          *logger.Logger
 	cookieSecure bool
 }
 
-func NewAuthHandler(authService *service.AuthService, log *logger.Logger) *AuthHandler {
+func NewAuthHandler(authService AuthServiceInterface, log *logger.Logger) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		log:         log,
+		authService:  authService,
+		log:          log,
 		cookieSecure: false,
 	}
 }
 
-func NewAuthHandlerWithConfig(authService *service.AuthService, log *logger.Logger, cookieSecure bool) *AuthHandler {
+func NewAuthHandlerWithConfig(authService AuthServiceInterface, log *logger.Logger, cookieSecure bool) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		log:         log,
+		authService:  authService,
+		log:          log,
 		cookieSecure: cookieSecure,
 	}
 }

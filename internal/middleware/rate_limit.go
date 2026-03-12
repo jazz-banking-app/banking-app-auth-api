@@ -9,11 +9,20 @@ import (
 	"go.uber.org/zap"
 )
 
+const rateLimitScript = `
+local attempts = redis.call('INCR', KEYS[1])
+if attempts == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return attempts
+`
+
 type RateLimiter struct {
 	redis       *redis.Client
 	maxAttempts int
 	window      time.Duration
 	log         *zap.Logger
+	script      *redis.Script
 }
 
 func NewRateLimiter(redisClient *redis.Client, maxAttempts int, window time.Duration, log *zap.Logger) *RateLimiter {
@@ -22,6 +31,7 @@ func NewRateLimiter(redisClient *redis.Client, maxAttempts int, window time.Dura
 		maxAttempts: maxAttempts,
 		window:      window,
 		log:         log,
+		script:      redis.NewScript(rateLimitScript),
 	}
 }
 
@@ -33,18 +43,11 @@ func (rl *RateLimiter) LoginRateLimit(next http.Handler) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		attempts, err := rl.redis.Do(ctx, "INCR", key).Int64()
+		attempts, err := rl.script.Run(ctx, rl.redis, []string{key}, int(rl.window.Seconds())).Int64()
 		if err != nil {
-			rl.log.Error("failed to increment rate limit", zap.Error(err))
+			rl.log.Error("failed to execute rate limit script", zap.Error(err))
 			next.ServeHTTP(w, r)
 			return
-		}
-
-		if attempts == 1 {
-			err = rl.redis.Expire(ctx, key, rl.window).Err()
-			if err != nil {
-				rl.log.Error("failed to set rate limit expiry", zap.Error(err))
-			}
 		}
 
 		if attempts > int64(rl.maxAttempts) {

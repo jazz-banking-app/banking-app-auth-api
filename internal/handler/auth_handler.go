@@ -141,10 +141,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 		var errors []string
 		for _, e := range err.(validator.ValidationErrors) {
-			if e.Field() == "Phone" {
+			switch e.Field() {
+			case "Phone":
 				errors = append(errors, "invalid phone format, expected +7XXXXXXXXXX")
-			} else if e.Field() == "Password" {
+			case "Password":
 				errors = append(errors, "password must be at least 8 characters with digits and special characters")
+			case "FirstName":
+				errors = append(errors, "first_name must be between 2 and 100 characters")
+			case "LastName":
+				errors = append(errors, "last_name must be between 2 and 100 characters")
 			}
 		}
 		json.NewEncoder(w).Encode(ErrorResponse{Error: strings.Join(errors, "; ")})
@@ -216,9 +221,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 		var errors []string
 		for _, e := range err.(validator.ValidationErrors) {
-			if e.Field() == "Phone" {
+			switch e.Field() {
+			case "Phone":
 				errors = append(errors, "invalid phone format, expected +7XXXXXXXXXX")
-			} else if e.Field() == "Password" {
+			case "Password":
 				errors = append(errors, "password must be at least 8 characters with digits and special characters")
 			}
 		}

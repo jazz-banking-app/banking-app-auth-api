@@ -61,8 +61,8 @@ func main() {
 	if cfg.JWT.Secret == "" {
 		log.Fatal("JWT_SECRET is required")
 	}
-	if cfg.JWT.Secret == "change-me-in-production" {
-		log.Warn("using default JWT secret - change in production!")
+	if cfg.JWT.Secret == "change-me-in-production" || cfg.JWT.Secret == "secret" || cfg.JWT.Secret == "password" {
+		log.Fatal("JWT_SECRET is set to a known weak value - use a strong random secret!")
 	}
 
 	ctx := context.Background()

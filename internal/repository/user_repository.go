@@ -2,23 +2,22 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 )
 
-type UserRepository struct {
+type UserRepositoryImpl struct {
 	conn *pgxpool.Pool
 }
 
-func NewUserRepository(conn *pgxpool.Pool) *UserRepository {
-	return &UserRepository{
-		conn: conn,
-	}
+func NewUserRepository(conn *pgxpool.Pool) UserRepository {
+	return &UserRepositoryImpl{conn: conn}
 }
 
-func (r *UserRepository) Create(ctx context.Context, phone, firstName, lastName, passwordHash string) (*model.User, error) {
+func (r *UserRepositoryImpl) Create(ctx context.Context, phone, firstName, lastName, passwordHash string) (*model.User, error) {
 	query := `
 		INSERT INTO users (id, phone, first_name, last_name, password_hash, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
@@ -42,7 +41,7 @@ func (r *UserRepository) Create(ctx context.Context, phone, firstName, lastName,
 	return user, nil
 }
 
-func (r *UserRepository) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
+func (r *UserRepositoryImpl) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
 	query := `
 		SELECT id, phone, first_name, last_name, password_hash, created_at, updated_at
 		FROM users
@@ -59,7 +58,7 @@ func (r *UserRepository) GetByPhone(ctx context.Context, phone string) (*model.U
 	return user, nil
 }
 
-func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
+func (r *UserRepositoryImpl) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	query := `
 		SELECT id, phone, first_name, last_name, created_at, updated_at
 		FROM users
@@ -76,7 +75,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.User
 	return user, nil
 }
 
-func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
+func (r *UserRepositoryImpl) Update(ctx context.Context, user *model.User) error {
 	query := `
 		UPDATE users
 		SET phone = $2, updated_at = NOW()
@@ -87,8 +86,14 @@ func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
 	return err
 }
 
-func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
+func (r *UserRepositoryImpl) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM users WHERE id = $1`
-	_, err := r.conn.Exec(ctx, query, id)
-	return err
+	result, err := r.conn.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }

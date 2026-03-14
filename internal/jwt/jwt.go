@@ -19,14 +19,21 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-type JWTManager struct {
+type JWTManager interface {
+	Generate(userID uuid.UUID, phone string) (*TokenPair, error)
+	Validate(tokenString string) (*Claims, error)
+	ValidateRefresh(tokenString string) (uuid.UUID, error)
+	ValidateRefreshWithJTI(tokenString string) (*jwt.RegisteredClaims, error)
+}
+
+type JWTManagerImpl struct {
 	secretKey       string
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
 }
 
-func NewJWTManager(secretKey string, accessTokenTTL, refreshTokenTTL time.Duration) *JWTManager {
-	return &JWTManager{
+func NewJWTManager(secretKey string, accessTokenTTL, refreshTokenTTL time.Duration) JWTManager {
+	return &JWTManagerImpl{
 		secretKey:       secretKey,
 		accessTokenTTL:  accessTokenTTL,
 		refreshTokenTTL: refreshTokenTTL,
@@ -38,7 +45,7 @@ type TokenPair struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func (m *JWTManager) Generate(userID uuid.UUID, phone string) (*TokenPair, error) {
+func (m *JWTManagerImpl) Generate(userID uuid.UUID, phone string) (*TokenPair, error) {
 	accessToken, err := m.generateAccessToken(userID, phone)
 	if err != nil {
 		return nil, err
@@ -55,7 +62,7 @@ func (m *JWTManager) Generate(userID uuid.UUID, phone string) (*TokenPair, error
 	}, nil
 }
 
-func (m *JWTManager) generateAccessToken(userID uuid.UUID, phone string) (string, error) {
+func (m *JWTManagerImpl) generateAccessToken(userID uuid.UUID, phone string) (string, error) {
 	claims := Claims{
 		UserID: userID,
 		Phone:  phone,
@@ -70,7 +77,7 @@ func (m *JWTManager) generateAccessToken(userID uuid.UUID, phone string) (string
 	return token.SignedString([]byte(m.secretKey))
 }
 
-func (m *JWTManager) generateRefreshToken(userID uuid.UUID) (string, error) {
+func (m *JWTManagerImpl) generateRefreshToken(userID uuid.UUID) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   userID.String(),
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.refreshTokenTTL)),
@@ -82,7 +89,7 @@ func (m *JWTManager) generateRefreshToken(userID uuid.UUID) (string, error) {
 	return token.SignedString([]byte(m.secretKey))
 }
 
-func (m *JWTManager) Validate(tokenString string) (*Claims, error) {
+func (m *JWTManagerImpl) Validate(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
@@ -102,7 +109,7 @@ func (m *JWTManager) Validate(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (m *JWTManager) ValidateRefresh(tokenString string) (uuid.UUID, error) {
+func (m *JWTManagerImpl) ValidateRefresh(tokenString string) (uuid.UUID, error) {
 	claims := &jwt.RegisteredClaims{}
 	_, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -123,7 +130,7 @@ func (m *JWTManager) ValidateRefresh(tokenString string) (uuid.UUID, error) {
 	return userID, nil
 }
 
-func (m *JWTManager) ValidateRefreshWithJTI(tokenString string) (*jwt.RegisteredClaims, error) {
+func (m *JWTManagerImpl) ValidateRefreshWithJTI(tokenString string) (*jwt.RegisteredClaims, error) {
 	claims := &jwt.RegisteredClaims{}
 	_, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

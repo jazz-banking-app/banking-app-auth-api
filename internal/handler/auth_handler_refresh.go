@@ -35,7 +35,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+    setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken, h.cookieSecure)
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(TokensResponse{

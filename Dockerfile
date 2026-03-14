@@ -13,11 +13,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /api ./cmd/api
 
 FROM alpine:latest
 
-WORKDIR /root/
+RUN addgroup -g 1000 appgroup && \
+    adduser -u 1000 -G appgroup -D appuser
+
+WORKDIR /home/appuser
 
 COPY --from=builder /api .
-
 COPY --from=builder /app/migrations ./migrations
+
+RUN chown -R appuser:appgroup /home/appuser
+
+USER appuser
 
 EXPOSE 8081
 

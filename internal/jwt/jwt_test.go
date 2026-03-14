@@ -188,7 +188,4 @@ func TestNewJWTManager(t *testing.T) {
 	manager := NewJWTManager(secretKey, accessTokenTTL, refreshTokenTTL)
 
 	require.NotNil(t, manager)
-	assert.Equal(t, secretKey, manager.secretKey)
-	assert.Equal(t, accessTokenTTL, manager.accessTokenTTL)
-	assert.Equal(t, refreshTokenTTL, manager.refreshTokenTTL)
 }

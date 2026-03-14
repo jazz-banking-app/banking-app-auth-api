@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"io"
 	"strings"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/argon2"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
@@ -21,17 +23,18 @@ var (
 )
 
 type AuthService struct {
-	userRepo      *repository.UserRepository
-	jwtManager    *jwt.JWTManager
-	logoutService *LogoutService
-	auditLogRepo  *repository.AuditLogRepository
+	userRepo      repository.UserRepository
+	jwtManager    jwt.JWTManager
+	logoutService LogoutService
+	auditLogRepo  repository.AuditLogRepository
+	log           *zap.Logger
 }
 
 func NewAuthService(
-	userRepo *repository.UserRepository,
-	jwtManager *jwt.JWTManager,
-	logoutService *LogoutService,
-	auditLogRepo *repository.AuditLogRepository,
+	userRepo repository.UserRepository,
+	jwtManager jwt.JWTManager,
+	logoutService LogoutService,
+	auditLogRepo repository.AuditLogRepository,
 ) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
@@ -41,13 +44,17 @@ func NewAuthService(
 	}
 }
 
+func (s *AuthService) WithLogger(log *zap.Logger) {
+	s.log = log
+}
+
 type AuthTokens struct {
 	User         *model.User `json:"user"`
 	AccessToken  string      `json:"access_token"`
 	RefreshToken string      `json:"refresh_token"`
 }
 
-func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, password string) (*AuthTokens, error) {
+func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, password, ip, ua string) (*AuthTokens, error) {
 	existing, err := s.userRepo.GetByPhone(ctx, phone)
 	if err == nil && existing != nil {
 		return nil, ErrUserAlreadyExists
@@ -68,13 +75,15 @@ func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, 
 		return nil, err
 	}
 
-	s.auditLogRepo.Create(ctx, &model.AuditLog{
+	if err := s.auditLogRepo.Create(ctx, &model.AuditLog{
 		UserID:    &user.ID,
 		Action:    model.AuditActionRegister,
-		IPAddress: "",
-		UserAgent: "",
+		IPAddress: ip,
+		UserAgent: ua,
 		Metadata:  map[string]any{"phone": phone, "first_name": firstName, "last_name": lastName},
-	})
+	}); err != nil && s.log != nil {
+		s.log.Warn("failed to create audit log for registration", zap.Error(err))
+	}
 
 	return &AuthTokens{
 		User:         user,
@@ -83,27 +92,31 @@ func (s *AuthService) Register(ctx context.Context, phone, firstName, lastName, 
 	}, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthTokens, error) {
+func (s *AuthService) Login(ctx context.Context, phone, password, ip, ua string) (*AuthTokens, error) {
 	user, err := s.userRepo.GetByPhone(ctx, phone)
 	if err != nil {
-		s.auditLogRepo.Create(ctx, &model.AuditLog{
+		if err := s.auditLogRepo.Create(ctx, &model.AuditLog{
 			UserID:    nil,
 			Action:    model.AuditActionLoginFailed,
-			IPAddress: "",
-			UserAgent: "",
+			IPAddress: ip,
+			UserAgent: ua,
 			Metadata:  map[string]any{"phone": phone, "error": "user not found"},
-		})
+		}); err != nil && s.log != nil {
+			s.log.Warn("failed to create audit log for login failed", zap.Error(err))
+		}
 		return nil, ErrInvalidCredentials
 	}
 
 	if !checkPassword(user.PasswordHash, password) {
-		s.auditLogRepo.Create(ctx, &model.AuditLog{
+		if err := s.auditLogRepo.Create(ctx, &model.AuditLog{
 			UserID:    &user.ID,
 			Action:    model.AuditActionLoginFailed,
-			IPAddress: "",
-			UserAgent: "",
+			IPAddress: ip,
+			UserAgent: ua,
 			Metadata:  map[string]any{"phone": phone, "error": "invalid password"},
-		})
+		}); err != nil && s.log != nil {
+			s.log.Warn("failed to create audit log for login failed", zap.Error(err))
+		}
 		return nil, ErrInvalidCredentials
 	}
 
@@ -112,13 +125,15 @@ func (s *AuthService) Login(ctx context.Context, phone, password string) (*AuthT
 		return nil, err
 	}
 
-	s.auditLogRepo.Create(ctx, &model.AuditLog{
+	if err := s.auditLogRepo.Create(ctx, &model.AuditLog{
 		UserID:    &user.ID,
 		Action:    model.AuditActionLoginSuccess,
-		IPAddress: "",
-		UserAgent: "",
+		IPAddress: ip,
+		UserAgent: ua,
 		Metadata:  map[string]any{"phone": phone},
-	})
+	}); err != nil && s.log != nil {
+		s.log.Warn("failed to create audit log for login success", zap.Error(err))
+	}
 
 	return &AuthTokens{
 		User:         user,
@@ -186,6 +201,10 @@ func checkPassword(hash, password string) bool {
 	}
 
 	expectedHash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+	storedHash, err := hex.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
 
-	return parts[1] == hex.EncodeToString(expectedHash)
+	return subtle.ConstantTimeCompare(expectedHash, storedHash) == 1
 }

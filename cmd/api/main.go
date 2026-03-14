@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -54,8 +55,15 @@ func main() {
 		panic(fmt.Sprintf("failed to load config: %v", err))
 	}
 
-	log := logger.New("info")
+	log := logger.New(cfg.HTTP.LogLevel)
 	defer log.Sync()
+
+	if cfg.JWT.Secret == "" {
+		log.Fatal("JWT_SECRET is required")
+	}
+	if cfg.JWT.Secret == "change-me-in-production" || cfg.JWT.Secret == "secret" || cfg.JWT.Secret == "password" {
+		log.Fatal("JWT_SECRET is set to a known weak value - use a strong random secret!")
+	}
 
 	ctx := context.Background()
 
@@ -84,19 +92,19 @@ func main() {
 	}
 	defer redis.Close()
 
+	userRepo := repository.NewUserRepository(postgres.Pool)
+	auditLogRepo := repository.NewAuditLogRepository(postgres.Pool)
+	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
 	jwtManager := jwt.NewJWTManager(
 		cfg.JWT.Secret,
 		cfg.JWT.AccessTokenTTL,
 		cfg.JWT.RefreshTokenTTL,
 	)
-
-	userRepo := repository.NewUserRepository(postgres.Pool)
-	auditLogRepo := repository.NewAuditLogRepository(postgres.Pool)
-	logoutService := service.NewLogoutService(redis.Client, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
 	authService := service.NewAuthService(userRepo, jwtManager, logoutService, auditLogRepo)
-	authHandler := handler.NewAuthHandler(authService, log)
+	authService.WithLogger(log.Logger)
+	authHandler := handler.NewAuthHandlerWithConfig(authService, log, cfg.HTTP.CookieSecure)
 
-	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger)
+	logoutHandler := handler.NewLogoutHandler(logoutService, jwtManager, log.Logger, cfg.HTTP.CookieSecure)
 
 	rateLimiter := appMiddleware.NewRateLimiter(redis.Client, cfg.HTTP.RateLimitMax, cfg.HTTP.RateLimitWindow, log.Logger)
 
@@ -106,6 +114,7 @@ func main() {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(appMiddleware.Logging(log))
+	r.Use(appMiddleware.RequestContextData)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.HTTP.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -120,7 +129,7 @@ func main() {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", healthHandler)
-		r.Get("/ready", readyHandler)
+		r.Get("/ready", readyHandler(postgres, redis))
 
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
@@ -141,16 +150,27 @@ func main() {
 		Handler:      r,
 		ReadTimeout:  cfg.HTTP.ReadTimeout,
 		WriteTimeout: cfg.HTTP.WriteTimeout,
+		IdleTimeout:  5 * time.Minute,
 	}
 
 	go func() {
 		log.Info("server starting",
 			zap.String("address", addr),
+			zap.String("swagger_url", cfg.HTTP.SwaggerURL),
+			zap.String("allowed_origins", strings.Join(cfg.HTTP.AllowedOrigins, ", ")),
 		)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("server failed", zap.Error(err))
 		}
 	}()
+
+	log.Info("configuration loaded",
+		zap.String("jwt_secret", "***"),
+		zap.Duration("jwt_access_ttl", cfg.JWT.AccessTokenTTL),
+		zap.Duration("jwt_refresh_ttl", cfg.JWT.RefreshTokenTTL),
+		zap.Int("rate_limit_max", cfg.HTTP.RateLimitMax),
+		zap.Duration("rate_limit_window", cfg.HTTP.RateLimitWindow),
+	)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -173,7 +193,23 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func readyHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Ready"))
+func readyHandler(postgres *database.Postgres, redis *database.Redis) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check PostgreSQL
+		if err := postgres.Pool.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("PostgreSQL unavailable"))
+			return
+		}
+
+		// Check Redis
+		if err := redis.Client.Ping(r.Context()).Err(); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Redis unavailable"))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Ready"))
+	}
 }

@@ -24,7 +24,7 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 		rw.status = http.StatusOK
 	}
 	size, err := rw.ResponseWriter.Write(b)
-	rw.size = size
+	rw.size += size
 	return size, err
 }
 

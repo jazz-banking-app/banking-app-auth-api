@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
@@ -11,16 +11,18 @@ import (
 )
 
 type LogoutHandler struct {
-	logoutService *service.LogoutService
-	jwtManager    *jwt.JWTManager
+	logoutService service.LogoutService
+	jwtManager    jwt.JWTManager
 	log           *zap.Logger
+	cookieSecure  bool
 }
 
-func NewLogoutHandler(logoutService *service.LogoutService, jwtManager *jwt.JWTManager, log *zap.Logger) *LogoutHandler {
+func NewLogoutHandler(logoutService service.LogoutService, jwtManager jwt.JWTManager, log *zap.Logger, cookieSecure bool) *LogoutHandler {
 	return &LogoutHandler{
 		logoutService: logoutService,
 		jwtManager:    jwtManager,
 		log:           log,
+		cookieSecure:  cookieSecure,
 	}
 }
 
@@ -34,39 +36,20 @@ func NewLogoutHandler(logoutService *service.LogoutService, jwtManager *jwt.JWTM
 // @Failure 401 {object} ErrorResponse
 // @Router /auth/logout [post]
 func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	tokenJTI, ok := middleware.GetTokenJTIFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "unauthorized"})
 		return
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "missing token", http.StatusUnauthorized)
-		return
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		http.Error(w, "invalid authorization format", http.StatusUnauthorized)
-		return
-	}
-
-	claims, err := h.jwtManager.Validate(tokenString)  
-	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return
-	}
-
-	if claims.UserID != userID {
-		http.Error(w, "token mismatch", http.StatusUnauthorized)
-		return
-	}
-
-	err = h.logoutService.Logout(r.Context(), claims.ID)
+	err := h.logoutService.Logout(r.Context(), tokenJTI)
 	if err != nil {
 		h.log.Error("failed to logout access token", zap.Error(err))
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "internal error"})
 		return
 	}
 
@@ -75,7 +58,9 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		h.log.Info("refresh token found in cookie", zap.String("jti", refreshCookie.Value))
 		if refreshClaims, err := h.jwtManager.ValidateRefreshWithJTI(refreshCookie.Value); err == nil {
 			h.log.Info("refresh token validated, blacklisting", zap.String("jti", refreshClaims.ID))
-			h.logoutService.BlacklistRefreshToken(r.Context(), refreshClaims.ID)
+			if err := h.logoutService.BlacklistRefreshToken(r.Context(), refreshClaims.ID); err != nil {
+				h.log.Error("failed to blacklist refresh token", zap.Error(err))
+			}
 		} else {
 			h.log.Warn("refresh token validation failed", zap.Error(err))
 		}
@@ -83,15 +68,7 @@ func (h *LogoutHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("refresh token not found in cookie", zap.Error(err))
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     RefreshTokenCookieName,
-		Value:    "",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-	})
+	clearAuthCookies(w, h.cookieSecure)
 
 	w.WriteHeader(http.StatusNoContent)
 }

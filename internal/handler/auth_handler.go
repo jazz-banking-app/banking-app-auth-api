@@ -5,20 +5,52 @@ package handler
 // @name Authorization
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/jwt"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/logger"
+	"github.com/jazzbonezz/banking-app-auth-api/internal/middleware"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/model"
 	"github.com/jazzbonezz/banking-app-auth-api/internal/service"
 	"go.uber.org/zap"
 )
 
+type AuthServiceInterface interface {
+	Register(ctx context.Context, phone, firstName, lastName, password string, ip, ua string) (*service.AuthTokens, error)
+	Login(ctx context.Context, phone, password string, ip, ua string) (*service.AuthTokens, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error)
+	RefreshTokens(ctx context.Context, refreshToken string) (*jwt.TokenPair, error)
+}
+
 const (
 	RefreshTokenCookieName = "refresh_token"
 	RefreshTokenMaxAge     = 604800
+	MaxRequestBodySize     = 1 << 20 // 1MB
+)
+
+func maskPhone(phone string) string {
+	if len(phone) <= 4 {
+		return "****"
+	}
+	return phone[:2] + "****" + phone[len(phone)-2:]
+}
+
+func getAuditData(r *http.Request) (ip, ua string) {
+	ip, _ = middleware.GetIPAddressFromContext(r.Context())
+	ua, _ = middleware.GetUserAgentFromContext(r.Context())
+	return ip, ua
+}
+
+var (
+	phoneRegex    = regexp.MustCompile(`^\+7\d{10}$`)
+	passwordRegex = regexp.MustCompile(`\d`)
+	specialRegex  = regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`)
 )
 
 var validate *validator.Validate
@@ -28,8 +60,7 @@ func init() {
 
 	validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
 		phone := fl.Field().String()
-		matched, _ := regexp.MatchString(`^\+7\d{10}$`, phone)
-		return matched
+		return phoneRegex.MatchString(phone)
 	})
 
 	validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
@@ -37,21 +68,29 @@ func init() {
 		if len(password) < 8 {
 			return false
 		}
-		hasDigit := regexp.MustCompile(`\d`).MatchString(password)
-		hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(password)
-		return hasDigit && hasSpecial
+		return passwordRegex.MatchString(password) && specialRegex.MatchString(password)
 	})
 }
 
 type AuthHandler struct {
-	authService *service.AuthService
-	log         *logger.Logger
+	authService  AuthServiceInterface
+	log          *logger.Logger
+	cookieSecure bool
 }
 
-func NewAuthHandler(authService *service.AuthService, log *logger.Logger) *AuthHandler {
+func NewAuthHandler(authService AuthServiceInterface, log *logger.Logger) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		log:         log,
+		authService:  authService,
+		log:          log,
+		cookieSecure: false,
+	}
+}
+
+func NewAuthHandlerWithConfig(authService AuthServiceInterface, log *logger.Logger, cookieSecure bool) *AuthHandler {
+	return &AuthHandler{
+		authService:  authService,
+		log:          log,
+		cookieSecure: cookieSecure,
 	}
 }
 
@@ -87,6 +126,7 @@ type ErrorResponse struct {
 // @Failure 409 {object} ErrorResponse
 // @Router /auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -99,23 +139,30 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 
-		var errMsg string
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Field() == "Phone" {
-				errMsg = "invalid phone format, expected +7XXXXXXXXXX"
-			} else if err.Field() == "Password" {
-				errMsg = "password must be at least 8 characters with digits and special characters"
+		var errors []string
+		for _, e := range err.(validator.ValidationErrors) {
+			switch e.Field() {
+			case "Phone":
+				errors = append(errors, "invalid phone format, expected +7XXXXXXXXXX")
+			case "Password":
+				errors = append(errors, "password must be at least 8 characters with digits and special characters")
+			case "FirstName":
+				errors = append(errors, "first_name must be between 2 and 100 characters")
+			case "LastName":
+				errors = append(errors, "last_name must be between 2 and 100 characters")
 			}
 		}
-		json.NewEncoder(w).Encode(ErrorResponse{Error: errMsg})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: strings.Join(errors, "; ")})
 		return
 	}
 
-	tokens, err := h.authService.Register(r.Context(), req.Phone, req.FirstName, req.LastName, req.Password)
+	ip, ua := getAuditData(r)
+
+	tokens, err := h.authService.Register(r.Context(), req.Phone, req.FirstName, req.LastName, req.Password, ip, ua)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
 			h.log.Warn("user registration failed",
-				zap.String("phone", req.Phone),
+				zap.String("phone", maskPhone(req.Phone)),
 				zap.String("reason", "user already exists"),
 			)
 			w.Header().Set("Content-Type", "application/json")
@@ -124,7 +171,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.log.Error("user registration failed",
-			zap.String("phone", req.Phone),
+			zap.String("phone", maskPhone(req.Phone)),
 			zap.Error(err),
 		)
 		w.Header().Set("Content-Type", "application/json")
@@ -135,10 +182,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Info("user registered",
 		zap.String("user_id", tokens.User.ID.String()),
-		zap.String("phone", req.Phone),
+		zap.String("phone", maskPhone(req.Phone)),
 	)
 
-	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+	setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken, h.cookieSecure)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -159,6 +206,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} ErrorResponse
 // @Router /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -171,23 +219,26 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 
-		var errMsg string
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Field() == "Phone" {
-				errMsg = "invalid phone format, expected +7XXXXXXXXXX"
-			} else if err.Field() == "Password" {
-				errMsg = "password must be at least 8 characters with digits and special characters"
+		var errors []string
+		for _, e := range err.(validator.ValidationErrors) {
+			switch e.Field() {
+			case "Phone":
+				errors = append(errors, "invalid phone format, expected +7XXXXXXXXXX")
+			case "Password":
+				errors = append(errors, "password must be at least 8 characters with digits and special characters")
 			}
 		}
-		json.NewEncoder(w).Encode(ErrorResponse{Error: errMsg})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: strings.Join(errors, "; ")})
 		return
 	}
 
-	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password)
+	ip, ua := getAuditData(r)
+
+	tokens, err := h.authService.Login(r.Context(), req.Phone, req.Password, ip, ua)
 	if err != nil {
 		if err == service.ErrInvalidCredentials {
 			h.log.Warn("failed login attempt",
-				zap.String("phone", req.Phone),
+				zap.String("phone", maskPhone(req.Phone)),
 			)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -195,7 +246,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.log.Error("login failed",
-			zap.String("phone", req.Phone),
+			zap.String("phone", maskPhone(req.Phone)),
 			zap.Error(err),
 		)
 		w.Header().Set("Content-Type", "application/json")
@@ -206,10 +257,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Info("user logged in",
 		zap.String("user_id", tokens.User.ID.String()),
-		zap.String("phone", req.Phone),
+		zap.String("phone", maskPhone(req.Phone)),
 	)
 
-	h.setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken)
+	setAuthCookies(w, tokens.AccessToken, tokens.RefreshToken, h.cookieSecure)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(AuthResponse{

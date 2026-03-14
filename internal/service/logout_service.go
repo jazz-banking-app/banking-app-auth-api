@@ -7,21 +7,21 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type LogoutService struct {
+type LogoutServiceImpl struct {
 	redisClient     *redis.Client
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
 }
 
-func NewLogoutService(redisClient *redis.Client, accessTokenTTL, refreshTokenTTL time.Duration) *LogoutService {
-	return &LogoutService{
+func NewLogoutService(redisClient *redis.Client, accessTokenTTL, refreshTokenTTL time.Duration) LogoutService {
+	return &LogoutServiceImpl{
 		redisClient:     redisClient,
 		accessTokenTTL:  accessTokenTTL,
 		refreshTokenTTL: refreshTokenTTL,
 	}
 }
 
-func (s *LogoutService) Logout(ctx context.Context, tokenJTI string) error {
+func (s *LogoutServiceImpl) Logout(ctx context.Context, tokenJTI string) error {
 	key := "blacklist:" + tokenJTI
 	err := s.redisClient.Set(ctx, key, "revoked", s.accessTokenTTL).Err()
 	if err != nil {
@@ -30,7 +30,7 @@ func (s *LogoutService) Logout(ctx context.Context, tokenJTI string) error {
 	return nil
 }
 
-func (s *LogoutService) IsTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
+func (s *LogoutServiceImpl) IsTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
 	key := "blacklist:" + tokenJTI
 	val, err := s.redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -42,7 +42,7 @@ func (s *LogoutService) IsTokenBlacklisted(ctx context.Context, tokenJTI string)
 	return val == "revoked", nil
 }
 
-func (s *LogoutService) BlacklistRefreshToken(ctx context.Context, tokenJTI string) error {
+func (s *LogoutServiceImpl) BlacklistRefreshToken(ctx context.Context, tokenJTI string) error {
 	key := "refresh_blacklist:" + tokenJTI
 	err := s.redisClient.Set(ctx, key, "revoked", s.refreshTokenTTL).Err()
 	if err != nil {
@@ -51,7 +51,7 @@ func (s *LogoutService) BlacklistRefreshToken(ctx context.Context, tokenJTI stri
 	return nil
 }
 
-func (s *LogoutService) IsRefreshTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
+func (s *LogoutServiceImpl) IsRefreshTokenBlacklisted(ctx context.Context, tokenJTI string) (bool, error) {
 	key := "refresh_blacklist:" + tokenJTI
 	val, err := s.redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {

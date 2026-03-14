@@ -9,6 +9,9 @@ RUN go mod download
 
 COPY . .
 
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN swag init --parseDependency --parseInternal --parseDepth 1 -d ./cmd/api -o ./docs
+
 RUN CGO_ENABLED=0 GOOS=linux go build -o /api ./cmd/api
 
 FROM alpine:latest
